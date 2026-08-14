@@ -213,3 +213,16 @@ export async function crearUsuario(cuerpo: CrearUsuarioCuerpo): Promise<void> {
   const { error } = await supabase.functions.invoke('crear-usuario', { body: cuerpo })
   if (error) throw new Error(await mensajeDeErrorFuncion(error))
 }
+
+interface RegistrarseCuerpo {
+  codigo: string
+  nombre: string
+  celular?: string | null
+  correo?: string | null
+}
+
+/** Registro público: crea la cuenta como inactiva, pendiente de activación por el admin. */
+export async function registrarse(cuerpo: RegistrarseCuerpo): Promise<void> {
+  const { error } = await supabase.functions.invoke('registrarse', { body: cuerpo })
+  if (error) throw new Error(await mensajeDeErrorFuncion(error))
+}

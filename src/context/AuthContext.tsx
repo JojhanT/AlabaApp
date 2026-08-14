@@ -30,7 +30,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('*')
       .eq('id', userId)
       .maybeSingle()
-    setPerfil((data as Perfil) ?? null)
+    const perfilData = (data as Perfil) ?? null
+    if (perfilData && perfilData.is_activo === false) {
+      await supabase.auth.signOut()
+      setSesion(null)
+      setPerfil(null)
+      return
+    }
+    setPerfil(perfilData)
   }
 
   useEffect(() => {

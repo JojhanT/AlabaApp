@@ -38,6 +38,9 @@ export default function AdminUsuarios() {
     setRolesError('')
     try {
       const ps = await obtenerPerfiles()
+      ps.sort(
+        (a, b) => Number(a.is_activo) - Number(b.is_activo) || a.nombre.localeCompare(b.nombre),
+      )
       setPerfiles(ps)
       const mapa: Record<string, number[]> = {}
       for (const p of ps) mapa[p.id] = await obtenerRolesDePerfil(p.id)
@@ -135,6 +138,20 @@ export default function AdminUsuarios() {
       return
     }
     setPerfiles((ps) => ps.map((p) => (p.id === perfilId ? { ...p, is_admin: valor } : p)))
+  }
+
+  async function actualizarActivo(perfilId: string, valor: boolean) {
+    setError('')
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_activo: valor })
+      .eq('id', perfilId)
+    if (error) {
+      setError(error.message)
+      return
+    }
+    setPerfiles((ps) => ps.map((p) => (p.id === perfilId ? { ...p, is_activo: valor } : p)))
+    setMensaje(valor ? 'Cuenta activada.' : 'Cuenta desactivada.')
   }
 
   async function guardarDatos(perfilId: string) {
@@ -259,6 +276,7 @@ export default function AdminUsuarios() {
                 <th>Código</th>
                 <th>Nombre</th>
                 <th>Roles</th>
+                <th>Estado</th>
                 <th>Admin</th>
                 <th></th>
               </tr>
@@ -279,6 +297,7 @@ export default function AdminUsuarios() {
                   onGuardarDatos={() => void guardarDatos(p.id)}
                   onToggleRol={(rolId, activo) => void actualizarRoles(p.id, rolId, activo)}
                   onToggleAdmin={(valor) => void actualizarAdmin(p.id, valor)}
+                  onToggleActivo={(valor) => void actualizarActivo(p.id, valor)}
                 />
               ))}
             </tbody>
@@ -303,6 +322,7 @@ interface FilaProps {
   onGuardarDatos: () => void
   onToggleRol: (rolId: number, activo: boolean) => void
   onToggleAdmin: (valor: boolean) => void
+  onToggleActivo: (valor: boolean) => void
 }
 
 function UsuarioFila({
@@ -318,6 +338,7 @@ function UsuarioFila({
   onGuardarDatos,
   onToggleRol,
   onToggleAdmin,
+  onToggleActivo,
 }: FilaProps) {
   const nombresRoles = roles.filter((r) => rolesDePerfil.includes(r.id)).map((r) => r.nombre)
 
@@ -338,6 +359,13 @@ function UsuarioFila({
         <td>{perfil.codigo}</td>
         <td>{perfil.nombre} {esYo && <span className="badge badge-lider">Tú</span>}</td>
         <td>{nombresRoles.length ? nombresRoles.join(', ') : <span className="muted">Sin rol</span>}</td>
+        <td>
+          {perfil.is_activo ? (
+            <span className="badge badge-ok">Activo</span>
+          ) : (
+            <span className="badge badge-pendiente">Pendiente</span>
+          )}
+        </td>
         <td>{perfil.is_admin ? 'Sí' : 'No'}</td>
         <td>
           <button type="button" className="btn btn-ghost" onClick={onExpandir}>
@@ -347,7 +375,7 @@ function UsuarioFila({
       </tr>
       {expandido && (
         <tr className="fila-expandida">
-          <td colSpan={5}>
+          <td colSpan={6}>
             <div className="editar-usuario">
               <div className="grid-form">
                 <label className="campo">
@@ -397,6 +425,14 @@ function UsuarioFila({
                 </div>
               )}
               <div className="editar-acciones">
+                <label className="chip chip-tog">
+                  <input
+                    type="checkbox"
+                    checked={perfil.is_activo}
+                    onChange={(e) => onToggleActivo(e.target.checked)}
+                  />
+                  Cuenta activa
+                </label>
                 <label className="chip chip-tog">
                   <input
                     type="checkbox"

@@ -29,7 +29,9 @@ priorizando a quienes menos veces han sido asignados en cada rol.
 1. Crea un proyecto en https://supabase.com (plan gratuito).
 2. Ve a **SQL Editor**, pega el contenido de `supabase/migrations/0001_init.sql` y ejecútalo.
    (Si usas la CLI: `supabase db push`.)
-3. Ve a **Project Settings → API** y copia la `URL` y la `anon key`.
+3. Ejecuta también `supabase/migrations/0002_is_activo.sql` (agrega la columna `is_activo`, para
+   que los usuarios que se registran queden pendientes de activación).
+4. Ve a **Project Settings → API** y copia la `URL` y la `anon key`.
 
 ### 2. Configurar el frontend
 
@@ -84,7 +86,10 @@ una sola archivo por función, por eso cada función es autónoma:
 
 1. Función `crear-usuario`: pega todo el contenido de
    `supabase/functions/crear-usuario/index.ts`.
-2. Función `generar-programacion`: pega todo el contenido de
+2. Función `registrarse`: pega todo el contenido de
+   `supabase/functions/registrarse/index.ts`. Crea las cuentas como **inactivas**; un
+   administrador las activa desde **Usuarios**.
+3. Función `generar-programacion`: pega todo el contenido de
    `supabase/functions/generar-programacion/index.ts` (el motor está incluido en el mismo archivo,
    no depende de `_shared`).
 
@@ -130,6 +135,8 @@ la semana actual.
 ## Funcionamiento
 
 - **Login:** código + contraseña (código). Backed por Supabase Auth con email derivado.
+- **Registro:** cualquiera puede solicitar acceso desde el login; la cuenta queda **inactiva**
+  hasta que un administrador la active desde **Usuarios**.
 - **Mi disponibilidad:** votar/no votar cada día de la semana (con navegación entre semanas).
 - **Programación:** vista por día y botón **“Generar programación”** (solo admin). El botón
   ejecuta el motor directamente en el navegador; es seguro porque la escritura está protegida
@@ -141,8 +148,9 @@ la semana actual.
 - Row Level Security activo: cada usuario solo vota/edita sus propios votos y su perfil.
 - La generación de programación solo la puede escribir un admin (RLS) o la edge function
   (service_role).
-- La edge function `crear-usuario` verifica que quien llama sea admin (o que sea el primer
-  usuario del sistema).
+- La edge function `crear-usuario` verifica que quien llama sea admin.
+- La edge function `registrarse` es pública pero solo crea cuentas **inactivas**; el login y el
+  contexto cierran sesión si la cuenta no está activa.
 - `service_role` y `CRON_SECRET` nunca se exponen en el frontend.
 
 ## Estructura
@@ -150,8 +158,10 @@ la semana actual.
 ```
 supabase/
   migrations/0001_init.sql        Esquema, RLS y roles
+  migrations/0002_is_activo.sql   Columna is_activo (activación de cuentas)
   functions/
     crear-usuario/                Crear usuario (valida admin)
+    registrarse/                  Registro público (cuenta inactiva)
     generar-programacion/         Generar por cron (service role, autónoma)
 .github/workflows/generar-programacion.yml   Cron de GitHub Actions
 src/

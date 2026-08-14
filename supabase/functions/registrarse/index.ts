@@ -21,36 +21,15 @@ interface Cuerpo {
   nombre?: unknown
   celular?: unknown
   correo?: unknown
-  roles?: unknown
 }
 
+// Registro público: crea el usuario como INACTIVO.
+// Un administrador debe activarlo para que pueda iniciar sesión.
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200, headers: corsHeaders })
   }
   if (req.method !== 'POST') return json({ error: 'Método no permitido' }, 405)
-
-  const servicio = createClient(supabaseUrl, serviceRoleKey)
-
-  // Identificar quién llama (por su JWT). Sin token = no autorizado.
-  const authHeader = req.headers.get('Authorization') ?? ''
-  const token = authHeader.replace('Bearer ', '').trim()
-  let callerId: string | null = null
-  if (token) {
-    const { data } = await servicio.auth.getUser(token)
-    callerId = data.user?.id ?? null
-  }
-
-  if (!callerId) return json({ error: 'No autorizado' }, 401)
-
-  const { data: perfil } = await servicio
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', callerId)
-    .maybeSingle()
-  if (!perfil?.is_admin) {
-    return json({ error: 'Solo un administrador puede crear usuarios' }, 403)
-  }
 
   let cuerpo: Cuerpo
   try {
@@ -63,9 +42,6 @@ Deno.serve(async (req) => {
   const nombre = String(cuerpo.nombre ?? '').trim()
   const celular = cuerpo.celular ? String(cuerpo.celular).trim() : null
   const correo = cuerpo.correo ? String(cuerpo.correo).trim() : null
-  const roles = Array.isArray(cuerpo.roles)
-    ? [...new Set((cuerpo.roles as unknown[]).map(Number))].filter(Number.isFinite)
-    : []
 
   if (!codigo || !nombre) return json({ error: 'Faltan datos: codigo y nombre son obligatorios' }, 400)
   if (codigo.length < 6) {
@@ -74,6 +50,17 @@ Deno.serve(async (req) => {
 
   const email = `${codigo}@iglesia.local`
   const password = codigo
+
+  const servicio = createClient(supabaseUrl, serviceRoleKey)
+
+  const { data: existente } = await servicio
+    .from('profiles')
+    .select('codigo')
+    .eq('codigo', codigo)
+    .maybeSingle()
+  if (existente) {
+    return json({ error: 'Ya existe un usuario con ese código' }, 400)
+  }
 
   const { data: nuevo, error: errUsuario } = await servicio.auth.admin.createUser({
     email,
@@ -90,23 +77,12 @@ Deno.serve(async (req) => {
     nombre,
     celular,
     correo,
-    is_activo: true,
+    is_activo: false,
   })
   if (errPerfil) {
     await servicio.auth.admin.deleteUser(userId)
     return json({ error: errPerfil.message }, 400)
   }
 
-  if (roles.length > 0) {
-    const { error: errRoles } = await servicio.from('profile_roles').insert(
-      roles.map((rolId) => ({ profile_id: userId, rol_id: rolId })),
-    )
-    if (errRoles) {
-      await servicio.from('profiles').delete().eq('id', userId)
-      await servicio.auth.admin.deleteUser(userId)
-      return json({ error: errRoles.message }, 400)
-    }
-  }
-
-  return json({ ok: true, id: userId })
+  return json({ ok: true, id: userId, pendiente_activacion: true })
 })

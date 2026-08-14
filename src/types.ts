@@ -5,6 +5,7 @@ export interface Perfil {
   celular: string | null
   correo: string | null
   is_admin: boolean
+  is_activo: boolean
   created_at: string
 }
 
