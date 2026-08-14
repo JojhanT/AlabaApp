@@ -1,0 +1,7 @@
+project_id = "programacion-semanal"
+
+[functions.crear-usuario]
+verify_jwt = true
+
+[functions.generar-programacion]
+verify_jwt = true

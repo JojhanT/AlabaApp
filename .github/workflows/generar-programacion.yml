@@ -1,0 +1,22 @@
+name: Generar programacion semanal
+
+on:
+  schedule:
+    # Todos los lunes a las 2:00 AM (UTC). Ajusta según necesites.
+    - cron: '0 2 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  generar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar a la edge function de Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS -X POST "$SUPABASE_URL/functions/v1/generar-programacion" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -H "Content-Type: application/json"
