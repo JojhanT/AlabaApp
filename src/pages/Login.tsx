@@ -9,7 +9,7 @@ export default function Login() {
   const [cargando, setCargando] = useState(false)
 
   const [mostrarRegistro, setMostrarRegistro] = useState(false)
-  const [registro, setRegistro] = useState({ codigo: '', nombre: '', celular: '', correo: '' })
+  const [registro, setRegistro] = useState({ codigo: '', nombre: '', celular: '' })
   const [registrando, setRegistrando] = useState(false)
   const [mensajeRegistro, setMensajeRegistro] = useState('')
 
@@ -44,14 +44,13 @@ export default function Login() {
       await registrarse({
         codigo: registro.codigo,
         nombre: registro.nombre,
-        celular: registro.celular || null,
-        correo: registro.correo || null,
+        celular: registro.celular,
       })
       setMensajeRegistro(
         `Solicitud de ${registro.nombre} recibida. Cuando el administrador active tu cuenta podrás ingresar.`,
       )
       setCodigo(registro.codigo)
-      setRegistro({ codigo: '', nombre: '', celular: '', correo: '' })
+      setRegistro({ codigo: '', nombre: '', celular: '' })
       setMostrarRegistro(false)
     } catch (e) {
       setError((e as Error).message)
@@ -138,20 +137,11 @@ export default function Login() {
               <label className="campo">
                 <span>Celular</span>
                 <input
-                  type="text"
+                  type="tel"
                   value={registro.celular}
                   onChange={(e) => setRegistro({ ...registro, celular: e.target.value })}
-                  placeholder="Opcional"
-                  disabled={registrando || cargando}
-                />
-              </label>
-              <label className="campo">
-                <span>Correo (para tu cuenta)</span>
-                <input
-                  type="email"
-                  value={registro.correo}
-                  onChange={(e) => setRegistro({ ...registro, correo: e.target.value })}
-                  placeholder="Opcional"
+                  placeholder="Número de celular"
+                  required
                   disabled={registrando || cargando}
                 />
               </label>

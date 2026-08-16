@@ -25,11 +25,10 @@ export default function AdminUsuarios() {
     codigo: '',
     nombre: '',
     celular: '',
-    correo: '',
     roles: new Set<number>(),
   })
 
-  const [edicion, setEdicion] = useState<Record<string, { nombre: string; celular: string; correo: string }>>(
+  const [edicion, setEdicion] = useState<Record<string, { nombre: string; celular: string }>>(
     {},
   )
 
@@ -91,11 +90,10 @@ export default function AdminUsuarios() {
         codigo: form.codigo,
         nombre: form.nombre,
         celular: form.celular || null,
-        correo: form.correo || null,
         roles: [...form.roles],
       })
       setMensaje(`Usuario ${form.nombre} creado correctamente.`)
-      setForm({ codigo: '', nombre: '', celular: '', correo: '', roles: new Set() })
+      setForm({ codigo: '', nombre: '', celular: '', roles: new Set() })
       await cargar()
     } catch (e) {
       setError((e as Error).message)
@@ -169,7 +167,7 @@ export default function AdminUsuarios() {
     setGuardando(perfilId)
     const { error } = await supabase
       .from('profiles')
-      .update({ nombre: datos.nombre, celular: datos.celular || null, correo: datos.correo || null })
+      .update({ nombre: datos.nombre, celular: datos.celular || null })
       .eq('id', perfilId)
     setGuardando(null)
     if (error) {
@@ -179,7 +177,7 @@ export default function AdminUsuarios() {
     setPerfiles((ps) =>
       ps.map((p) =>
         p.id === perfilId
-          ? { ...p, nombre: datos.nombre, celular: datos.celular || null, correo: datos.correo || null }
+          ? { ...p, nombre: datos.nombre, celular: datos.celular || null }
           : p,
       ),
     )
@@ -189,7 +187,7 @@ export default function AdminUsuarios() {
   function abrirEdicion(p: Perfil) {
     setEdicion((e) => ({
       ...e,
-      [p.id]: { nombre: p.nombre, celular: p.celular ?? '', correo: p.correo ?? '' },
+      [p.id]: { nombre: p.nombre, celular: p.celular ?? '' },
     }))
     setExpandido((prev) => (prev === p.id ? null : p.id))
   }
@@ -239,16 +237,6 @@ export default function AdminUsuarios() {
                 type="text"
                 value={form.celular}
                 onChange={(e) => setForm({ ...form, celular: e.target.value })}
-                placeholder="Opcional"
-                disabled={creando}
-              />
-            </label>
-            <label className="campo">
-              <span>Correo</span>
-              <input
-                type="email"
-                value={form.correo}
-                onChange={(e) => setForm({ ...form, correo: e.target.value })}
                 placeholder="Opcional"
                 disabled={creando}
               />
@@ -332,10 +320,10 @@ interface FilaProps {
   rolesDePerfil: number[]
   esYo: boolean
   expandido: boolean
-  edicion?: { nombre: string; celular: string; correo: string }
+  edicion?: { nombre: string; celular: string }
   guardando: boolean
   onExpandir: () => void
-  onEdicion: (fn: (prev: Record<string, { nombre: string; celular: string; correo: string }>) => Record<string, { nombre: string; celular: string; correo: string }>) => void
+  onEdicion: (fn: (prev: Record<string, { nombre: string; celular: string }>) => Record<string, { nombre: string; celular: string }>) => void
   onGuardarDatos: () => void
   onToggleRol: (rolId: number, activo: boolean) => void
   onToggleAdmin: (valor: boolean) => void
@@ -360,12 +348,11 @@ function UsuarioFila({
 }: FilaProps) {
   const nombresRoles = roles.filter((r) => rolesDePerfil.includes(r.id)).map((r) => r.nombre)
 
-  function setCampo(campo: 'nombre' | 'celular' | 'correo', valor: string) {
+  function setCampo(campo: 'nombre' | 'celular', valor: string) {
     onEdicion((prev) => {
       const base = prev[perfil.id] ?? {
         nombre: perfil.nombre,
         celular: perfil.celular ?? '',
-        correo: perfil.correo ?? '',
       }
       return { ...prev, [perfil.id]: { ...base, [campo]: valor } }
     })
@@ -411,15 +398,6 @@ function UsuarioFila({
                     type="text"
                     value={edicion?.celular ?? ''}
                     onChange={(e) => setCampo('celular', e.target.value)}
-                    disabled={guardando}
-                  />
-                </label>
-                <label className="campo">
-                  <span>Correo</span>
-                  <input
-                    type="email"
-                    value={edicion?.correo ?? ''}
-                    onChange={(e) => setCampo('correo', e.target.value)}
                     disabled={guardando}
                   />
                 </label>

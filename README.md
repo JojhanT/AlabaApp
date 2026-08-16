@@ -13,7 +13,7 @@ priorizando a quienes menos veces han sido asignados en cada rol.
 
 ## Reglas de la programación
 
-- Usuarios: código (cédula), nombre, celular y correo. La contraseña es el mismo código.
+- Usuarios: código (cédula), nombre y celular. La contraseña es el mismo código.
 - Roles: Cantante, Piano, Guitarra, Batería y Saxofonista (un usuario puede tener varios).
 - Por día: **1 piano, 1 batería, 1 cantante líder y hasta 3 apoyos**.
   Guitarra y saxofón: **se asignan todos los disponibles** que votaron ese día.
@@ -36,16 +36,16 @@ priorizando a quienes menos veces han sido asignados en cada rol.
    que los usuarios que se registran queden pendientes de activación).
 4. Ejecuta `supabase/migrations/0003_registro_front.sql` (crea el trigger que genera el perfil
    automáticamente cuando alguien se registra desde la app).
-5. Ejecuta `supabase/migrations/0004_correo_por_codigo.sql` (función que permite iniciar sesión
-   con el código aunque la cuenta se haya registrado con un email propio).
-6. Ejecuta `supabase/migrations/0005_borrado_restrictivo.sql` (evita que borrar un usuario elimine
+5. Ejecuta `supabase/migrations/0005_borrado_restrictivo.sql` (evita que borrar un usuario elimine
    sus votos o la programación generada).
-7. Ejecuta `supabase/migrations/0006_repertorio.sql` (repertorio por día y permiso de update
-   para cambiar líder/apoyo manualmente).
-8. En **Authentication → Sign In / Up**:
+6. Ejecuta `supabase/migrations/0006_repertorio.sql` (repertorio por día y permiso de update).
+7. Ejecuta `supabase/migrations/0007_roles_lider_apoyo.sql` (roles Líder y Apoyo, sin columna tipo).
+8. Ejecuta `supabase/migrations/0008_sin_correo.sql` (elimina la columna correo y el login por
+   email propio; todas las cuentas usan `CODIGO@iglesia.local`).
+9. En **Authentication → Sign In / Up**:
    - Activa **"Allow new users to sign up"**.
-   - En el proveedor **Email**, desactiva **"Confirm email"**: los usuarios que no escriben email
-     quedan con una cuenta `CODIGO@iglesia.local`, que no puede recibir correos reales.
+   - En el proveedor **Email**, desactiva **"Confirm email"**: todas las cuentas usan
+     `CODIGO@iglesia.local`, un dominio que no puede recibir correos reales.
 7. Ve a **Project Settings → API** y copia la `URL` y la `anon key`.
 
 ### 2. Configurar el frontend
@@ -69,7 +69,7 @@ npm run dev
 ### 3. Crear el primer administrador
 
 La contraseña es el código (cédula) y el email de acceso se deriva automáticamente como
-`CODIGO@iglesia.local`.
+`CODIGO@iglesia.local` (todas las cuentas usan ese dominio).
 
 **Opción A (recomendada, requiere la edge function):** en Supabase → **Authentication → Users →
 Add user**, crea el usuario con email `CODIGO@iglesia.local` y contraseña = código. Luego ejecuta
@@ -149,12 +149,11 @@ la semana actual.
 
 ## Funcionamiento
 
-- **Login:** código + contraseña (código). Backed por Supabase Auth: se intenta con el email
-  derivado `codigo@iglesia.local` y, si no funciona, con el email que el usuario registró
-  (migración `0004`).
+- **Login:** código + contraseña (código). El email de la cuenta siempre es
+  `codigo@iglesia.local` (Supabase Auth).
 - **Registro:** cualquiera puede solicitar acceso desde el login (directo con Supabase Auth);
-  si escribe su email, ese es el email de la cuenta. La cuenta queda **inactiva** hasta que un
-  administrador la active desde **Usuarios**.
+  escribe código, nombre y celular. La cuenta queda **inactiva** hasta que un administrador la
+  active desde **Usuarios**.
 - **Mi disponibilidad:** votar/no votar cada día de la semana (con navegación entre semanas).
 - **Programación:** vista por día y botón **“Generar programación”** (solo admin). El botón
   ejecuta el motor directamente en el navegador; es seguro porque la escritura está protegida
@@ -180,9 +179,10 @@ supabase/
   migrations/0001_init.sql        Esquema, RLS y roles
   migrations/0002_is_activo.sql   Columna is_activo (activación de cuentas)
   migrations/0003_registro_front.sql  Trigger de registro público (signUp)
-  migrations/0004_correo_por_codigo.sql  Función para login por código con email propio
   migrations/0005_borrado_restrictivo.sql  Borrado restrictivo (votos y programación se conservan)
-  migrations/0006_repertorio.sql   Repertorio por día + toggle líder/apoyo manual
+  migrations/0006_repertorio.sql   Repertorio por día
+  migrations/0007_roles_lider_apoyo.sql  Roles Líder/Apoyo, sin columna tipo
+  migrations/0008_sin_correo.sql   Elimina correo; todas las cuentas usan @iglesia.local
   functions/
     crear-usuario/                Crear usuario (valida admin)
     registrarse/                  Legacy: registro público (ya no se usa, ver migración 0003)

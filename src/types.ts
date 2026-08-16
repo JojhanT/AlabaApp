@@ -3,7 +3,6 @@ export interface Perfil {
   codigo: string
   nombre: string
   celular: string | null
-  correo: string | null
   is_admin: boolean
   is_activo: boolean
   created_at: string

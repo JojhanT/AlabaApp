@@ -20,7 +20,6 @@ interface Cuerpo {
   codigo?: unknown
   nombre?: unknown
   celular?: unknown
-  correo?: unknown
   roles?: unknown
 }
 
@@ -62,7 +61,6 @@ Deno.serve(async (req) => {
   const codigo = String(cuerpo.codigo ?? '').trim()
   const nombre = String(cuerpo.nombre ?? '').trim()
   const celular = cuerpo.celular ? String(cuerpo.celular).trim() : null
-  const correo = cuerpo.correo ? String(cuerpo.correo).trim() : null
   const roles = Array.isArray(cuerpo.roles)
     ? [...new Set((cuerpo.roles as unknown[]).map(Number))].filter(Number.isFinite)
     : []
@@ -89,7 +87,6 @@ Deno.serve(async (req) => {
     codigo,
     nombre,
     celular,
-    correo,
     is_activo: true,
   })
   if (errPerfil) {

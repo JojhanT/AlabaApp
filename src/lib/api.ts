@@ -174,7 +174,6 @@ interface CrearUsuarioCuerpo {
   codigo: string
   nombre: string
   celular?: string | null
-  correo?: string | null
   roles: number[]
 }
 
@@ -215,25 +214,23 @@ export async function crearUsuario(cuerpo: CrearUsuarioCuerpo): Promise<void> {
 interface RegistrarseCuerpo {
   codigo: string
   nombre: string
-  celular?: string | null
-  correo?: string | null
+  celular: string
 }
 
 /**
  * Registro público directamente con Supabase Auth (sin edge function).
- * Usa el email que escribió el usuario (si lo dio); si no, genera uno
- * desde el código (codigo@iglesia.local).
+ * El email de la cuenta se genera desde el código (codigo@iglesia.local).
  * Crea la cuenta INACTIVA: un trigger en auth.users (migración 0003) crea el
  * perfil con is_activo = false, y el AuthContext cierra la sesión automáticamente
  * hasta que un administrador active la cuenta.
  *
  * Requisitos en Supabase (Authentication → Sign In / Up):
  *  - "Allow new users to sign up" activado.
- *  - Si el usuario no escribe email, "Confirm email" debe estar desactivado
- *    (no se puede enviar correo a dominios @iglesia.local).
+ *  - "Confirm email" debe estar desactivado
+ *    (la cuenta usa el dominio @iglesia.local, que no recibe correos).
  */
 export async function registrarse(cuerpo: RegistrarseCuerpo): Promise<void> {
-  const email = cuerpo.correo?.trim() || emailDesdeCodigo(cuerpo.codigo)
+  const email = emailDesdeCodigo(cuerpo.codigo)
   const { data, error } = await supabase.auth.signUp({
     email,
     password: cuerpo.codigo,
@@ -241,8 +238,7 @@ export async function registrarse(cuerpo: RegistrarseCuerpo): Promise<void> {
       data: {
         codigo: cuerpo.codigo,
         nombre: cuerpo.nombre,
-        celular: cuerpo.celular ?? '',
-        correo: cuerpo.correo?.trim() ?? '',
+        celular: cuerpo.celular,
       },
     },
   })

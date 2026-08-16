@@ -13,17 +13,8 @@ export interface ResultadoLogin {
 
 export async function iniciarSesion(codigo: string): Promise<ResultadoLogin> {
   const limpio = codigo.trim()
-  let email = emailDesdeCodigo(limpio)
-  let resultado = await supabase.auth.signInWithPassword({ email, password: limpio })
-
-  // Cuentas registradas con su propio email (migración 0004): el email de la
-  // cuenta no es codigo@iglesia.local, así que se busca el guardado en el perfil.
-  if (resultado.error) {
-    const { data: correo } = await supabase.rpc('correo_de_perfil', { p_codigo: limpio })
-    if (typeof correo === 'string' && correo && correo !== email) {
-      resultado = await supabase.auth.signInWithPassword({ email: correo, password: limpio })
-    }
-  }
+  const email = emailDesdeCodigo(limpio)
+  const resultado = await supabase.auth.signInWithPassword({ email, password: limpio })
 
   if (resultado.error || !resultado.data.session) {
     return {
