@@ -29,6 +29,13 @@ export interface ProgramacionRow {
   dia_semana: string
   rol_id: number
   profile_id: string
-  tipo: 'lider' | 'apoyo' | null
   created_at: string
+}
+
+export interface RepertorioDia {
+  semana_inicio: string
+  dia_semana: string
+  repertorio: string
+  updated_by: string | null
+  updated_at: string
 }

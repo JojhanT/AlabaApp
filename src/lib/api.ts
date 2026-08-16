@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase, emailDesdeCodigo } from './supabase'
 import { calcularProgramacion, DIAS_SEMANA, type DiaSemana } from './planificador'
 import { fechaDeDia, toDateString } from './dias'
 import type { Perfil, ProgramacionRow, Rol, Voto } from '../types'
@@ -106,7 +106,6 @@ export interface GenerarSemanaResultado {
     dia_semana: DiaSemana
     rol_id: number
     profile_id: string
-    tipo: 'lider' | 'apoyo' | null
   }[]
   noAsignados: Record<DiaSemana, string[]>
 }
@@ -147,7 +146,6 @@ export async function generarProgramacionSemana(
         dia_semana: dia,
         rol_id: a.rol_id,
         profile_id: a.profile_id,
-        tipo: a.tipo,
       })
     }
   }
@@ -200,7 +198,7 @@ async function mensajeDeErrorFuncion(error: unknown): Promise<string> {
   }
 
   if (conError.name === 'FunctionsFetchError') {
-    return 'No se pudo contactar el servidor. Verifica que la edge function esté desplegada y que la URL del proyecto sea correcta.'
+    return 'No se pudo contactar el servidor. Verifica que la edge function esté desplegada en Supabase y que la URL del proyecto sea correcta.'
   }
 
   return conError.message ?? 'Error desconocido'
@@ -221,8 +219,87 @@ interface RegistrarseCuerpo {
   correo?: string | null
 }
 
-/** Registro público: crea la cuenta como inactiva, pendiente de activación por el admin. */
+/**
+ * Registro público directamente con Supabase Auth (sin edge function).
+ * Usa el email que escribió el usuario (si lo dio); si no, genera uno
+ * desde el código (codigo@iglesia.local).
+ * Crea la cuenta INACTIVA: un trigger en auth.users (migración 0003) crea el
+ * perfil con is_activo = false, y el AuthContext cierra la sesión automáticamente
+ * hasta que un administrador active la cuenta.
+ *
+ * Requisitos en Supabase (Authentication → Sign In / Up):
+ *  - "Allow new users to sign up" activado.
+ *  - Si el usuario no escribe email, "Confirm email" debe estar desactivado
+ *    (no se puede enviar correo a dominios @iglesia.local).
+ */
 export async function registrarse(cuerpo: RegistrarseCuerpo): Promise<void> {
-  const { error } = await supabase.functions.invoke('registrarse', { body: cuerpo })
-  if (error) throw new Error(await mensajeDeErrorFuncion(error))
+  const email = cuerpo.correo?.trim() || emailDesdeCodigo(cuerpo.codigo)
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: cuerpo.codigo,
+    options: {
+      data: {
+        codigo: cuerpo.codigo,
+        nombre: cuerpo.nombre,
+        celular: cuerpo.celular ?? '',
+        correo: cuerpo.correo?.trim() ?? '',
+      },
+    },
+  })
+
+  if (error) {
+    const mensaje = error.message
+    const bajo = mensaje.toLowerCase()
+    if (/(already|duplicate|unique|ya existe|conflict)/.test(bajo)) {
+      throw new Error(
+        'Ese código ya está registrado. Intenta iniciar sesión o espera la activación del administrador.',
+      )
+    }
+    if (/database error/i.test(bajo)) {
+      throw new Error(
+        'No se pudo completar el registro. Verifica que el código no esté ya registrado e intenta de nuevo.',
+      )
+    }
+    if (/(sign.?up|signups?|not allowed|registr)/.test(bajo)) {
+      throw new Error(
+        'El registro no está habilitado en Supabase. Activa "Allow new users to sign up" e intenta de nuevo.',
+      )
+    }
+    throw new Error(mensaje)
+  }
+
+  if (!data.user) {
+    throw new Error('No se pudo crear la cuenta. Intenta de nuevo más tarde.')
+  }
+
+  // Con "Confirm email" desactivado, signUp devuelve una sesión de cuenta inactiva:
+  // el AuthContext detecta is_activo = false y cierra la sesión automáticamente.
 }
+
+// ------------------------------------------------------------------
+// Repertorio por día
+// ------------------------------------------------------------------
+
+export async function obtenerRepertorios(semanaInicio: string) {
+  const { data, error } = await supabase
+    .from('repertorio_dia')
+    .select('*')
+    .eq('semana_inicio', semanaInicio)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as import('../types').RepertorioDia[]
+}
+
+export async function guardarRepertorio(
+  semanaInicio: string,
+  diaSemana: string,
+  repertorio: string,
+) {
+  const { error } = await supabase
+    .from('repertorio_dia')
+    .upsert(
+      { semana_inicio: semanaInicio, dia_semana: diaSemana, repertorio },
+      { onConflict: 'semana_inicio,dia_semana' },
+    )
+  if (error) throw new Error(error.message)
+}
+

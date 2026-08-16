@@ -8,7 +8,7 @@ interface AuthState {
   sesion: Session | null
   perfil: Perfil | null
   esAdmin: boolean
-  recargarPerfil: () => Promise<void>
+  recargarPerfil: () => Promise<boolean>
 }
 
 const AuthContext = createContext<AuthState>({
@@ -16,7 +16,7 @@ const AuthContext = createContext<AuthState>({
   sesion: null,
   perfil: null,
   esAdmin: false,
-  recargarPerfil: async () => {},
+  recargarPerfil: async () => false,
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sesion, setSesion] = useState<Session | null>(null)
   const [perfil, setPerfil] = useState<Perfil | null>(null)
 
-  async function cargarPerfil(userId: string) {
+  async function cargarPerfil(userId: string): Promise<boolean> {
     const { data } = await supabase
       .from('profiles')
       .select('*')
@@ -35,25 +35,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.auth.signOut()
       setSesion(null)
       setPerfil(null)
-      return
+      return false
     }
     setPerfil(perfilData)
+    return true
   }
 
   useEffect(() => {
     let activo = true
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!activo) return
-      setSesion(data.session)
-      if (data.session) void cargarPerfil(data.session.user.id)
-      setCargando(false)
+      const session = data.session
+      if (session) {
+        const ok = await cargarPerfil(session.user.id)
+        if (activo && ok) setSesion(session)
+      }
+      if (activo) setCargando(false)
     })
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSesion(session)
-      if (session) void cargarPerfil(session.user.id)
-      else setPerfil(null)
+      if (!session) {
+        setPerfil(null)
+        setSesion(null)
+        return
+      }
+      void cargarPerfil(session.user.id).then((ok) => {
+        if (activo && ok) setSesion(session)
+      })
     })
 
     return () => {

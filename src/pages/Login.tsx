@@ -80,11 +80,16 @@ export default function Login() {
                 onChange={(e) => setCodigo(e.target.value)}
                 placeholder="Tu código"
                 required
+                disabled={cargando || registrando}
               />
             </label>
             {error && <p className="error">{error}</p>}
             {mensajeRegistro && <p className="ok">{mensajeRegistro}</p>}
-            <button type="submit" className="btn btn-primary btn-block" disabled={cargando}>
+            <button
+              type="submit"
+              className="btn btn-primary btn-block"
+              disabled={cargando || registrando}
+            >
               {cargando ? 'Ingresando…' : 'Ingresar'}
             </button>
           </form>
@@ -92,6 +97,7 @@ export default function Login() {
             type="button"
             className="btn btn-ghost btn-block"
             onClick={() => setMostrarRegistro((v) => !v)}
+            disabled={cargando || registrando}
           >
             {mostrarRegistro ? 'Cerrar' : '¿No tienes cuenta? Regístrate'}
           </button>
@@ -115,6 +121,7 @@ export default function Login() {
                   placeholder="Ej: 1023456789"
                   required
                   minLength={6}
+                  disabled={registrando || cargando}
                 />
               </label>
               <label className="campo">
@@ -125,6 +132,7 @@ export default function Login() {
                   onChange={(e) => setRegistro({ ...registro, nombre: e.target.value })}
                   placeholder="Nombre completo"
                   required
+                  disabled={registrando || cargando}
                 />
               </label>
               <label className="campo">
@@ -134,24 +142,33 @@ export default function Login() {
                   value={registro.celular}
                   onChange={(e) => setRegistro({ ...registro, celular: e.target.value })}
                   placeholder="Opcional"
+                  disabled={registrando || cargando}
                 />
               </label>
               <label className="campo">
-                <span>Correo</span>
+                <span>Correo (para tu cuenta)</span>
                 <input
                   type="email"
                   value={registro.correo}
                   onChange={(e) => setRegistro({ ...registro, correo: e.target.value })}
                   placeholder="Opcional"
+                  disabled={registrando || cargando}
                 />
               </label>
-              <button type="submit" className="btn btn-primary btn-block" disabled={registrando}>
+              <button
+                type="submit"
+                className="btn btn-primary btn-block"
+                disabled={registrando || cargando}
+              >
                 {registrando ? 'Enviando…' : 'Enviar solicitud'}
               </button>
             </form>
           </div>
         )}
       </div>
+      <p className="login-creditos">
+        AlabaApp © 2026 · Desarrollado por <b>Jojhan Torres</b>
+      </p>
     </div>
   )
 }

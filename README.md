@@ -4,6 +4,9 @@ Sistema para programar la banda de la semana. Cada usuario vota qué días estar
 (Martes, Jueves, Sábado y Domingo) y el sistema genera automáticamente la programación por día,
 priorizando a quienes menos veces han sido asignados en cada rol.
 
+- **Desarrollado por:** Jojhan Torres
+- **Copyright:** © 2026 Jojhan Torres. Todos los derechos reservados.
+
 - **Frontend:** React + Vite + TypeScript (se despliega gratis en Vercel/Netlify)
 - **Base de datos y autenticación:** Supabase (plan gratis)
 - **Cron opcional:** GitHub Actions que llama una edge function de Supabase
@@ -31,7 +34,19 @@ priorizando a quienes menos veces han sido asignados en cada rol.
    (Si usas la CLI: `supabase db push`.)
 3. Ejecuta también `supabase/migrations/0002_is_activo.sql` (agrega la columna `is_activo`, para
    que los usuarios que se registran queden pendientes de activación).
-4. Ve a **Project Settings → API** y copia la `URL` y la `anon key`.
+4. Ejecuta `supabase/migrations/0003_registro_front.sql` (crea el trigger que genera el perfil
+   automáticamente cuando alguien se registra desde la app).
+5. Ejecuta `supabase/migrations/0004_correo_por_codigo.sql` (función que permite iniciar sesión
+   con el código aunque la cuenta se haya registrado con un email propio).
+6. Ejecuta `supabase/migrations/0005_borrado_restrictivo.sql` (evita que borrar un usuario elimine
+   sus votos o la programación generada).
+7. Ejecuta `supabase/migrations/0006_repertorio.sql` (repertorio por día y permiso de update
+   para cambiar líder/apoyo manualmente).
+8. En **Authentication → Sign In / Up**:
+   - Activa **"Allow new users to sign up"**.
+   - En el proveedor **Email**, desactiva **"Confirm email"**: los usuarios que no escriben email
+     quedan con una cuenta `CODIGO@iglesia.local`, que no puede recibir correos reales.
+7. Ve a **Project Settings → API** y copia la `URL` y la `anon key`.
 
 ### 2. Configurar el frontend
 
@@ -86,12 +101,12 @@ una sola archivo por función, por eso cada función es autónoma:
 
 1. Función `crear-usuario`: pega todo el contenido de
    `supabase/functions/crear-usuario/index.ts`.
-2. Función `registrarse`: pega todo el contenido de
-   `supabase/functions/registrarse/index.ts`. Crea las cuentas como **inactivas**; un
-   administrador las activa desde **Usuarios**.
-3. Función `generar-programacion`: pega todo el contenido de
+2. Función `generar-programacion`: pega todo el contenido de
    `supabase/functions/generar-programacion/index.ts` (el motor está incluido en el mismo archivo,
    no depende de `_shared`).
+
+> El registro público ya **no usa** la edge function `registrarse`: se hace directamente con
+> Supabase Auth desde el frontend y el trigger de la migración `0003_registro_front.sql`.
 
 Luego configura los secretos de cada función (Dashboard → **Edge Functions → Secrets**):
 
@@ -134,13 +149,18 @@ la semana actual.
 
 ## Funcionamiento
 
-- **Login:** código + contraseña (código). Backed por Supabase Auth con email derivado.
-- **Registro:** cualquiera puede solicitar acceso desde el login; la cuenta queda **inactiva**
-  hasta que un administrador la active desde **Usuarios**.
+- **Login:** código + contraseña (código). Backed por Supabase Auth: se intenta con el email
+  derivado `codigo@iglesia.local` y, si no funciona, con el email que el usuario registró
+  (migración `0004`).
+- **Registro:** cualquiera puede solicitar acceso desde el login (directo con Supabase Auth);
+  si escribe su email, ese es el email de la cuenta. La cuenta queda **inactiva** hasta que un
+  administrador la active desde **Usuarios**.
 - **Mi disponibilidad:** votar/no votar cada día de la semana (con navegación entre semanas).
 - **Programación:** vista por día y botón **“Generar programación”** (solo admin). El botón
   ejecuta el motor directamente en el navegador; es seguro porque la escritura está protegida
-  por RLS (solo admin). También muestra el contador histórico por rol.
+  por RLS (solo admin). También muestra el contador histórico por rol. El admin puede asignar
+  manualmente quién **lidera** y quién es **apoyo** en cada rol (select junto al nombre).
+  Cualquier miembro puede escribir el **repertorio** del día (campo de texto por día).
 - **Usuarios (admin):** crear usuarios, asignar roles y administradores.
 
 ## Seguridad
@@ -149,8 +169,8 @@ la semana actual.
 - La generación de programación solo la puede escribir un admin (RLS) o la edge function
   (service_role).
 - La edge function `crear-usuario` verifica que quien llama sea admin.
-- La edge function `registrarse` es pública pero solo crea cuentas **inactivas**; el login y el
-  contexto cierran sesión si la cuenta no está activa.
+- El registro público usa Supabase Auth (`signUp`) y el trigger de la migración `0003` crea el
+  perfil con `is_activo = false`; el login y el contexto cierran sesión si la cuenta no está activa.
 - `service_role` y `CRON_SECRET` nunca se exponen en el frontend.
 
 ## Estructura
@@ -159,9 +179,13 @@ la semana actual.
 supabase/
   migrations/0001_init.sql        Esquema, RLS y roles
   migrations/0002_is_activo.sql   Columna is_activo (activación de cuentas)
+  migrations/0003_registro_front.sql  Trigger de registro público (signUp)
+  migrations/0004_correo_por_codigo.sql  Función para login por código con email propio
+  migrations/0005_borrado_restrictivo.sql  Borrado restrictivo (votos y programación se conservan)
+  migrations/0006_repertorio.sql   Repertorio por día + toggle líder/apoyo manual
   functions/
     crear-usuario/                Crear usuario (valida admin)
-    registrarse/                  Registro público (cuenta inactiva)
+    registrarse/                  Legacy: registro público (ya no se usa, ver migración 0003)
     generar-programacion/         Generar por cron (service role, autónoma)
 .github/workflows/generar-programacion.yml   Cron de GitHub Actions
 src/

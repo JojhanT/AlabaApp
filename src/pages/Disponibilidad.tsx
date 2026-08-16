@@ -18,7 +18,10 @@ export default function Disponibilidad() {
   const [error, setError] = useState('')
 
   async function cargar() {
-    if (!perfil) return
+    if (!perfil) {
+      setCargando(false)
+      return
+    }
     setCargando(true)
     setError('')
     try {
@@ -59,6 +62,19 @@ export default function Disponibilidad() {
     } finally {
       setGuardando(null)
     }
+  }
+
+  if (!perfil) {
+    return (
+      <div className="pagina">
+        <h2>Mi disponibilidad</h2>
+        <p className="error">
+          No se encontró tu perfil. Esto pasa cuando la cuenta se registró sin aplicar la migración
+          0003 (no se creó el perfil). Pide a un administrador que elimine tu cuenta en Supabase →
+          Authentication → Users y vuelve a registrarte.
+        </p>
+      </div>
+    )
   }
 
   if (cargando && !roles.length) {

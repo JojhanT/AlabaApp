@@ -17,6 +17,7 @@ export default function AdminUsuarios() {
   const [rolesError, setRolesError] = useState('')
   const [mensaje, setMensaje] = useState('')
   const [creando, setCreando] = useState(false)
+  const [guardando, setGuardando] = useState<string | null>(null)
   const [expandido, setExpandido] = useState<string | null>(null)
   const [pagina, setPagina] = useState(1)
 
@@ -105,6 +106,7 @@ export default function AdminUsuarios() {
 
   async function actualizarRoles(perfilId: string, rolId: number, activo: boolean) {
     setError('')
+    setGuardando(perfilId)
     try {
       if (activo) {
         const { error } = await supabase
@@ -127,12 +129,16 @@ export default function AdminUsuarios() {
       })
     } catch (e) {
       setError((e as Error).message)
+    } finally {
+      setGuardando(null)
     }
   }
 
   async function actualizarAdmin(perfilId: string, valor: boolean) {
     setError('')
+    setGuardando(perfilId)
     const { error } = await supabase.from('profiles').update({ is_admin: valor }).eq('id', perfilId)
+    setGuardando(null)
     if (error) {
       setError(error.message)
       return
@@ -142,10 +148,12 @@ export default function AdminUsuarios() {
 
   async function actualizarActivo(perfilId: string, valor: boolean) {
     setError('')
+    setGuardando(perfilId)
     const { error } = await supabase
       .from('profiles')
       .update({ is_activo: valor })
       .eq('id', perfilId)
+    setGuardando(null)
     if (error) {
       setError(error.message)
       return
@@ -158,10 +166,12 @@ export default function AdminUsuarios() {
     setError('')
     const datos = edicion[perfilId]
     if (!datos) return
+    setGuardando(perfilId)
     const { error } = await supabase
       .from('profiles')
       .update({ nombre: datos.nombre, celular: datos.celular || null, correo: datos.correo || null })
       .eq('id', perfilId)
+    setGuardando(null)
     if (error) {
       setError(error.message)
       return
@@ -209,6 +219,7 @@ export default function AdminUsuarios() {
                 placeholder="Ej: 1023456789"
                 required
                 minLength={6}
+                disabled={creando}
               />
             </label>
             <label className="campo">
@@ -219,6 +230,7 @@ export default function AdminUsuarios() {
                 onChange={(e) => setForm({ ...form, nombre: e.target.value })}
                 placeholder="Nombre completo"
                 required
+                disabled={creando}
               />
             </label>
             <label className="campo">
@@ -228,6 +240,7 @@ export default function AdminUsuarios() {
                 value={form.celular}
                 onChange={(e) => setForm({ ...form, celular: e.target.value })}
                 placeholder="Opcional"
+                disabled={creando}
               />
             </label>
             <label className="campo">
@@ -237,6 +250,7 @@ export default function AdminUsuarios() {
                 value={form.correo}
                 onChange={(e) => setForm({ ...form, correo: e.target.value })}
                 placeholder="Opcional"
+                disabled={creando}
               />
             </label>
           </div>
@@ -255,6 +269,7 @@ export default function AdminUsuarios() {
                     type="checkbox"
                     checked={form.roles.has(rol.id)}
                     onChange={() => toggleRolFormulario(rol.id)}
+                    disabled={creando}
                   />
                   {rol.nombre}
                 </label>
@@ -292,6 +307,7 @@ export default function AdminUsuarios() {
                   esYo={yo?.id === p.id}
                   expandido={expandido === p.id}
                   edicion={edicion[p.id]}
+                  guardando={guardando === p.id}
                   onExpandir={() => abrirEdicion(p)}
                   onEdicion={setEdicion}
                   onGuardarDatos={() => void guardarDatos(p.id)}
@@ -317,6 +333,7 @@ interface FilaProps {
   esYo: boolean
   expandido: boolean
   edicion?: { nombre: string; celular: string; correo: string }
+  guardando: boolean
   onExpandir: () => void
   onEdicion: (fn: (prev: Record<string, { nombre: string; celular: string; correo: string }>) => Record<string, { nombre: string; celular: string; correo: string }>) => void
   onGuardarDatos: () => void
@@ -333,6 +350,7 @@ function UsuarioFila({
   esYo,
   expandido,
   edicion,
+  guardando,
   onExpandir,
   onEdicion,
   onGuardarDatos,
@@ -384,6 +402,7 @@ function UsuarioFila({
                     type="text"
                     value={edicion?.nombre ?? ''}
                     onChange={(e) => setCampo('nombre', e.target.value)}
+                    disabled={guardando}
                   />
                 </label>
                 <label className="campo">
@@ -392,6 +411,7 @@ function UsuarioFila({
                     type="text"
                     value={edicion?.celular ?? ''}
                     onChange={(e) => setCampo('celular', e.target.value)}
+                    disabled={guardando}
                   />
                 </label>
                 <label className="campo">
@@ -400,6 +420,7 @@ function UsuarioFila({
                     type="email"
                     value={edicion?.correo ?? ''}
                     onChange={(e) => setCampo('correo', e.target.value)}
+                    disabled={guardando}
                   />
                 </label>
               </div>
@@ -418,6 +439,7 @@ function UsuarioFila({
                         type="checkbox"
                         checked={rolesDePerfil.includes(rol.id)}
                         onChange={(e) => onToggleRol(rol.id, e.target.checked)}
+                        disabled={guardando}
                       />
                       {rol.nombre}
                     </label>
@@ -430,6 +452,7 @@ function UsuarioFila({
                     type="checkbox"
                     checked={perfil.is_activo}
                     onChange={(e) => onToggleActivo(e.target.checked)}
+                    disabled={guardando}
                   />
                   Cuenta activa
                 </label>
@@ -438,11 +461,17 @@ function UsuarioFila({
                     type="checkbox"
                     checked={perfil.is_admin}
                     onChange={(e) => onToggleAdmin(e.target.checked)}
+                    disabled={guardando}
                   />
                   Es administrador
                 </label>
-                <button type="button" className="btn btn-secondary" onClick={onGuardarDatos}>
-                  Guardar datos
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={onGuardarDatos}
+                  disabled={guardando}
+                >
+                  {guardando ? 'Guardando…' : 'Guardar datos'}
                 </button>
               </div>
             </div>

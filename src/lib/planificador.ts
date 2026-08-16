@@ -8,19 +8,26 @@ export type DiaSemana = 'Martes' | 'Jueves' | 'Sabado' | 'Domingo'
 export const DIAS_SEMANA: DiaSemana[] = ['Martes', 'Jueves', 'Sabado', 'Domingo']
 
 export const ROL_ID = {
-  CANTANTE: 1,
   PIANO: 2,
   GUITARRA: 3,
   BATERIA: 4,
   SAXOFONISTA: 5,
+  LIDER: 6,
+  APOYO: 7,
 } as const
 
-export type TipoAsignacion = 'lider' | 'apoyo' | null
+export const ROL_EMOJI: Record<number, string> = {
+  [ROL_ID.LIDER]: '🎤',
+  [ROL_ID.PIANO]: '🎹',
+  [ROL_ID.GUITARRA]: '🎸',
+  [ROL_ID.BATERIA]: '🥁',
+  [ROL_ID.SAXOFONISTA]: '🎷',
+  [ROL_ID.APOYO]: '🎶',
+}
 
 export interface Asignacion {
   rol_id: number
   profile_id: string
-  tipo: TipoAsignacion
 }
 
 export interface EntradaPlanificacion {
@@ -34,23 +41,26 @@ export interface ResultadoPlanificacion {
   noAsignados: Record<DiaSemana, string[]>
 }
 
-export const CUPOS: Record<number, number | 'todos' | 'especial'> = {
-  [ROL_ID.CANTANTE]: 'especial',
+// Cuántas personas se asignan por rol cada día.
+// Un líder NO puede ser apoyo el mismo día (el motor lo excluye).
+export const CUPOS: Record<number, number> = {
+  [ROL_ID.LIDER]: 1,
   [ROL_ID.PIANO]: 1,
   [ROL_ID.BATERIA]: 1,
-  [ROL_ID.GUITARRA]: 'todos',
-  [ROL_ID.SAXOFONISTA]: 'todos',
+  [ROL_ID.GUITARRA]: 1,
+  [ROL_ID.SAXOFONISTA]: 1,
+  [ROL_ID.APOYO]: 3,
 }
 
+// Orden en que se asignan: primero el líder, luego instrumentistas, al final apoyos.
 export const ORDEN_ROL: number[] = [
-  ROL_ID.CANTANTE,
+  ROL_ID.LIDER,
   ROL_ID.PIANO,
   ROL_ID.BATERIA,
   ROL_ID.GUITARRA,
   ROL_ID.SAXOFONISTA,
+  ROL_ID.APOYO,
 ]
-
-export const MAX_APOYOS = 3
 
 function compararPorConteo(conteos: Record<string, number>) {
   return (a: string, b: string): number => {
@@ -68,35 +78,34 @@ export function calcularProgramacion(entrada: EntradaPlanificacion): ResultadoPl
   for (const dia of DIAS_SEMANA) {
     const votantes = new Set(entrada.votosPorDia[dia] ?? [])
     const asignados = new Set<string>()
+    let liderId: string | null = null
+    let liderDoble = false
 
     for (const rol of ORDEN_ROL) {
       const conteosRol = entrada.conteos[rol] ?? {}
-      const candidatos = [...votantes]
+      let candidatos = [...votantes]
         .filter((id) => (entrada.rolesPorPerfil[id] ?? []).includes(rol) && !asignados.has(id))
         .sort(compararPorConteo(conteosRol))
 
-      const cupo = CUPOS[rol]
+      // Solo el líder puede duplicarse con PIANO (y solo si él toca piano),
+      // únicamente como respaldo cuando no hay otro pianista disponible.
+      if (
+        candidatos.length === 0 &&
+        rol === ROL_ID.PIANO &&
+        liderId &&
+        !liderDoble &&
+        (entrada.rolesPorPerfil[liderId] ?? []).includes(ROL_ID.PIANO)
+      ) {
+        candidatos = [liderId]
+      }
 
-      if (cupo === 'especial') {
-        const lider = candidatos[0]
-        if (lider) {
-          asignados.add(lider)
-          dias[dia].push({ rol_id: rol, profile_id: lider, tipo: 'lider' })
-        }
-        for (const apoyo of candidatos.slice(1, 1 + MAX_APOYOS)) {
-          asignados.add(apoyo)
-          dias[dia].push({ rol_id: rol, profile_id: apoyo, tipo: 'apoyo' })
-        }
-      } else if (cupo === 'todos') {
-        for (const id of candidatos) {
-          asignados.add(id)
-          dias[dia].push({ rol_id: rol, profile_id: id, tipo: null })
-        }
-      } else {
-        for (const id of candidatos.slice(0, cupo)) {
-          asignados.add(id)
-          dias[dia].push({ rol_id: rol, profile_id: id, tipo: null })
-        }
+      const cupo = CUPOS[rol]
+      const elegidos = candidatos.slice(0, cupo)
+      for (const id of elegidos) {
+        asignados.add(id)
+        if (rol === ROL_ID.LIDER) liderId = id
+        if (liderId && id === liderId && rol !== ROL_ID.LIDER) liderDoble = true
+        dias[dia].push({ rol_id: rol, profile_id: id })
       }
     }
 

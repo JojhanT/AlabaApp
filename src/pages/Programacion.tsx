@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import SemanaSelector from '../components/SemanaSelector'
 import { useSemana } from '../hooks/useSemana'
-import { DIAS_SEMANA, ORDEN_ROL, type DiaSemana } from '../lib/planificador'
+import { DIAS_SEMANA, ORDEN_ROL, ROL_EMOJI, type DiaSemana } from '../lib/planificador'
 import { toDateString, fechaDeDia, formatFechaLarga } from '../lib/dias'
 import {
   guardarCacheProgramacion,
@@ -14,10 +14,12 @@ import {
   obtenerConteosHistoricos,
   obtenerPerfiles,
   obtenerProgramacionSemana,
+  obtenerRepertorios,
   obtenerRoles,
+  guardarRepertorio,
   nombreDeId,
 } from '../lib/api'
-import type { Perfil, ProgramacionRow, Rol } from '../types'
+import type { Perfil, ProgramacionRow, RepertorioDia, Rol } from '../types'
 
 interface Agrupado {
   [rolId: number]: ProgramacionRow[]
@@ -43,6 +45,9 @@ export default function Programacion() {
     Sabado: [],
     Domingo: [],
   })
+  const [repertorios, setRepertorios] = useState<RepertorioDia[]>([])
+  const [repEdit, setRepEdit] = useState<Record<string, string>>({})
+  const [repGuardando, setRepGuardando] = useState<string | null>(null)
 
   function aplicarCache(cache: CacheSemana) {
     setFilas(cache.filas)
@@ -70,16 +75,18 @@ export default function Programacion() {
     }
 
     try {
-      const [filasData, perfilesData, rolesData, conteosData] = await Promise.all([
+      const [filasData, perfilesData, rolesData, conteosData, repData] = await Promise.all([
         obtenerProgramacionSemana(semanaStr),
         obtenerPerfiles(),
         obtenerRoles(),
         obtenerConteosHistoricos(semanaStr),
+        obtenerRepertorios(semanaStr).catch(() => [] as RepertorioDia[]),
       ])
       setFilas(filasData)
       setPerfiles(perfilesData)
       setRoles(rolesData)
       setConteos(conteosData)
+      setRepertorios(repData)
       setSinConexion(false)
       guardarCacheProgramacion(semanaStr, {
         filas: filasData,
@@ -146,6 +153,35 @@ export default function Programacion() {
     g.filas.map((f) => ({ rol: g.rol.nombre, perfil: f.perfil, veces: f.veces })),
   )
 
+  function repDe(dia: DiaSemana): string {
+    return repertorios.find((r) => r.dia_semana === dia)?.repertorio ?? ''
+  }
+
+  async function guardarRep(dia: DiaSemana) {
+    const texto = (repEdit[dia] ?? '').trim()
+    setRepGuardando(dia)
+    try {
+      await guardarRepertorio(toDateString(semana), dia, texto)
+      setRepertorios((prev) => {
+        const filtered = prev.filter((r) => r.dia_semana !== dia)
+        if (texto) {
+          filtered.push({
+            semana_inicio: toDateString(semana),
+            dia_semana: dia,
+            repertorio: texto,
+            updated_by: null,
+            updated_at: new Date().toISOString(),
+          })
+        }
+        return filtered
+      })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setRepGuardando(null)
+    }
+  }
+
   return (
     <div className="pagina">
       <div className="encabezado-fila">
@@ -195,13 +231,13 @@ export default function Programacion() {
                     const rol = roles.find((r) => r.id === rolId)
                     return (
                       <div key={rolId} className="rol-grupo">
-                        <span className="rol-nombre">{rol?.nombre ?? `Rol ${rolId}`}</span>
+                        <span className="rol-nombre">
+                          {ROL_EMOJI[rolId] ?? ''} {rol?.nombre ?? `Rol ${rolId}`}
+                        </span>
                         <div className="rol-miembros">
                           {filasRol.map((f) => (
                             <span key={f.id} className="chip">
                               {nombreDeId(perfiles, f.profile_id)}
-                              {f.tipo === 'lider' && <b className="badge badge-lider">Líder</b>}
-                              {f.tipo === 'apoyo' && <b className="badge badge-apoyo">Apoyo</b>}
                             </span>
                           ))}
                         </div>
@@ -215,6 +251,28 @@ export default function Programacion() {
                   Sin cupo para esta fecha:{' '}
                   {noAsignados[dia].map((id) => nombreDeId(perfiles, id)).join(', ')}
                 </p>
+              )}
+              {totalPorDia(dia) > 0 && (
+                <div className="repertorio-seccion">
+                  <label className="repertorio-label">Repertorio</label>
+                  <textarea
+                    className="repertorio-textarea"
+                    rows={3}
+                    placeholder="Escribe el repertorio del día..."
+                    value={repEdit[dia] ?? repDe(dia)}
+                    onChange={(e) => setRepEdit((prev) => ({ ...prev, [dia]: e.target.value }))}
+                  />
+                  {(repEdit[dia] ?? '') !== repDe(dia) && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={repGuardando === dia}
+                      onClick={() => void guardarRep(dia)}
+                    >
+                      {repGuardando === dia ? 'Guardando…' : 'Guardar repertorio'}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ))}
