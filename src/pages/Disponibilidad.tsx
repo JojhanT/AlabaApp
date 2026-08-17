@@ -68,10 +68,8 @@ export default function Disponibilidad() {
     return (
       <div className="pagina">
         <h2>Mi disponibilidad</h2>
-        <p className="error">
-          No se encontró tu perfil. Esto pasa cuando la cuenta se registró sin aplicar la migración
-          0003 (no se creó el perfil). Pide a un administrador que elimine tu cuenta en Supabase →
-          Authentication → Users y vuelve a registrarte.
+        <p className="aviso">
+          No se pudo cargar tu perfil. Verifica tu conexión a internet e intenta de nuevo.
         </p>
       </div>
     )

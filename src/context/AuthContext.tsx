@@ -25,31 +25,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [perfil, setPerfil] = useState<Perfil | null>(null)
 
   async function cargarPerfil(userId: string): Promise<boolean> {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle()
-    const perfilData = (data as Perfil) ?? null
-    if (perfilData && perfilData.is_activo === false) {
-      await supabase.auth.signOut()
-      setSesion(null)
-      setPerfil(null)
-      return false
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+      if (error) return true
+      const perfilData = (data as Perfil) ?? null
+      if (perfilData && perfilData.is_activo === false) {
+        await supabase.auth.signOut()
+        setSesion(null)
+        setPerfil(null)
+        return false
+      }
+      setPerfil(perfilData)
+      return true
+    } catch {
+      return true
     }
-    setPerfil(perfilData)
-    return true
   }
 
   useEffect(() => {
     let activo = true
 
-    supabase.auth.getSession().then(async ({ data }) => {
+    supabase.auth.getSession().then(async ({ data, error }) => {
       if (!activo) return
+      if (error) {
+        if (activo) setCargando(false)
+        return
+      }
       const session = data.session
       if (session) {
-        const ok = await cargarPerfil(session.user.id)
-        if (activo && ok) setSesion(session)
+        await cargarPerfil(session.user.id)
+        if (activo) setSesion(session)
       }
       if (activo) setCargando(false)
     })
@@ -60,8 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSesion(null)
         return
       }
-      void cargarPerfil(session.user.id).then((ok) => {
-        if (activo && ok) setSesion(session)
+      void cargarPerfil(session.user.id).then(() => {
+        if (activo) setSesion(session)
       })
     })
 
