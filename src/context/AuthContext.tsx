@@ -81,6 +81,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void cargarPerfil(session.user.id)
       } else if (event === 'TOKEN_REFRESHED' && session) {
         setSesion(session)
+      } else if (event === 'SIGNED_OUT') {
+        if (!sesionDesdeStorage()) {
+          setPerfil(null)
+          setSesion(null)
+        }
       }
     })
 
