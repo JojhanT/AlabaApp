@@ -36,7 +36,6 @@ export default function Programacion() {
   const [generando, setGenerando] = useState(false)
   const [mensaje, setMensaje] = useState('')
   const [error, setError] = useState('')
-  const [sinConexion, setSinConexion] = useState(false)
   const [verContadores, setVerContadores] = useState(false)
   const [limiteContadores, setLimiteContadores] = useState(15)
   const [noAsignados, setNoAsignados] = useState<Record<DiaSemana, string[]>>({
@@ -68,8 +67,6 @@ export default function Programacion() {
     }
 
     if (!navigator.onLine) {
-      if (cache) setSinConexion(true)
-      else setError('Sin conexión y no hay datos guardados para esta semana.')
       setCargando(false)
       return
     }
@@ -87,7 +84,6 @@ export default function Programacion() {
       setRoles(rolesData)
       setConteos(conteosData)
       setRepertorios(repData)
-      setSinConexion(false)
       guardarCacheProgramacion(semanaStr, {
         filas: filasData,
         perfiles: perfilesData,
@@ -95,8 +91,7 @@ export default function Programacion() {
         conteos: conteosData,
       })
     } catch {
-      if (!cache) setError('No se pudo cargar la programación. Verifica tu conexión.')
-      else setSinConexion(true)
+      if (!cache) setError('No se pudo cargar la programación.')
     } finally {
       setCargando(false)
     }
@@ -104,7 +99,6 @@ export default function Programacion() {
 
   useEffect(() => {
     setError('')
-    setSinConexion(false)
     void cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [semana])
@@ -205,11 +199,6 @@ export default function Programacion() {
 
       {mensaje && <p className="ok">{mensaje}</p>}
       {error && <p className="error">{error}</p>}
-      {sinConexion && (
-        <p className="aviso">
-          Sin conexión: mostrando los datos guardados de la última visita.
-        </p>
-      )}
       {cargando ? (
         <div className="centrado">Cargando…</div>
       ) : (
@@ -258,10 +247,11 @@ export default function Programacion() {
                     className="repertorio-textarea"
                     rows={3}
                     placeholder="Escribe el repertorio del día..."
+                    disabled={!navigator.onLine}
                     value={repEdit[dia] ?? repDe(dia)}
                     onChange={(e) => setRepEdit((prev) => ({ ...prev, [dia]: e.target.value }))}
                   />
-                  {(repEdit[dia] ?? '') !== repDe(dia) && (
+                  {(repEdit[dia] ?? '') !== repDe(dia) && navigator.onLine && (
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
