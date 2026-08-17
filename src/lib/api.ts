@@ -207,6 +207,7 @@ async function mensajeDeErrorFuncion(error: unknown): Promise<string> {
  * Crea un usuario vía la edge function (requiere sesión de administrador).
  */
 export async function crearUsuario(cuerpo: CrearUsuarioCuerpo): Promise<void> {
+  if (import.meta.env.VITE_DEMO_MODE === 'true') return
   const { error } = await supabase.functions.invoke('crear-usuario', { body: cuerpo })
   if (error) throw new Error(await mensajeDeErrorFuncion(error))
 }
@@ -230,6 +231,7 @@ interface RegistrarseCuerpo {
  *    (la cuenta usa el dominio @iglesia.local, que no recibe correos).
  */
 export async function registrarse(cuerpo: RegistrarseCuerpo): Promise<void> {
+  if (import.meta.env.VITE_DEMO_MODE === 'true') return
   const email = emailDesdeCodigo(cuerpo.codigo)
   const { data, error } = await supabase.auth.signUp({
     email,
