@@ -49,29 +49,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let activo = true
 
-    supabase.auth.getSession().then(async ({ data, error }) => {
+    // getSession() lee de localStorage. Si falla (sin red), igual usamos la sesión
+    // que haya guardada: el usuario puede navegar y el perfil se carga cuando haya conexión.
+    supabase.auth.getSession().then(({ data }) => {
       if (!activo) return
-      if (error) {
-        if (activo) setCargando(false)
-        return
-      }
-      const session = data.session
+      const session = data?.session ?? null
       if (session) {
-        await cargarPerfil(session.user.id)
-        if (activo) setSesion(session)
+        setSesion(session)
+        setCargando(false)
+        void cargarPerfil(session.user.id)
+      } else {
+        setCargando(false)
       }
-      if (activo) setCargando(false)
     })
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setSesion(session)
+        void cargarPerfil(session.user.id)
+      } else if (event === 'SIGNED_OUT') {
         setPerfil(null)
         setSesion(null)
-        return
+      } else if (event === 'TOKEN_REFRESHED' && session) {
+        setSesion(session)
       }
-      void cargarPerfil(session.user.id).then(() => {
-        if (activo) setSesion(session)
-      })
     })
 
     return () => {
