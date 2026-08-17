@@ -246,26 +246,32 @@ export default function Programacion() {
                   {noAsignados[dia].map((id) => nombreDeId(perfiles, id)).join(', ')}
                 </p>
               )}
-              {totalPorDia(dia) > 0 && (
+              {totalPorDia(dia) > 0 && repDe(dia) && (
                 <div className="repertorio-seccion">
                   <label className="repertorio-label">Repertorio</label>
-                  <textarea
-                    className="repertorio-textarea"
-                    rows={3}
-                    placeholder="Escribe el repertorio del día..."
-                    disabled={!navigator.onLine}
-                    value={repEdit[dia] ?? repDe(dia)}
-                    onChange={(e) => setRepEdit((prev) => ({ ...prev, [dia]: e.target.value }))}
-                  />
-                  {(repEdit[dia] ?? '') !== repDe(dia) && navigator.onLine && (
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      disabled={repGuardando === dia}
-                      onClick={() => void guardarRep(dia)}
-                    >
-                      {repGuardando === dia ? 'Guardando…' : 'Guardar repertorio'}
-                    </button>
+                  {esAdmin ? (
+                    <>
+                      <textarea
+                        className="repertorio-textarea"
+                        rows={3}
+                        placeholder="Escribe el repertorio del día..."
+                        disabled={!navigator.onLine}
+                        value={repEdit[dia] ?? repDe(dia)}
+                        onChange={(e) => setRepEdit((prev) => ({ ...prev, [dia]: e.target.value }))}
+                      />
+                      {(repEdit[dia] ?? '') !== repDe(dia) && navigator.onLine && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={repGuardando === dia}
+                          onClick={() => void guardarRep(dia)}
+                        >
+                          {repGuardando === dia ? 'Guardando…' : 'Guardar repertorio'}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <p className="repertorio-texto">{repDe(dia)}</p>
                   )}
                 </div>
               )}
@@ -274,7 +280,7 @@ export default function Programacion() {
         </div>
       )}
 
-      {conteosOrdenados.length > 0 && (
+      {esAdmin && conteosOrdenados.length > 0 && (
         <section className="card">
           <div className="encabezado-fila">
             <h3>Contador por rol</h3>

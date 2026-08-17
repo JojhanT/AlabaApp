@@ -512,6 +512,13 @@ p {
   outline-offset: -1px;
 }
 
+.repertorio-texto {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--texto);
+  white-space: pre-wrap;
+}
+
 .btn-sm {
   font-size: 0.8rem;
   padding: 0.25rem 0.6rem;
