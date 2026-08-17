@@ -60,6 +60,7 @@ export default function Disponibilidad() {
     } catch {
       setError('No se pudo guardar tu voto. Intenta de nuevo.')
     } finally {
+      setGuardando(null)
     }
   }
 

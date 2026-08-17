@@ -197,7 +197,7 @@ async function mensajeDeErrorFuncion(error: unknown): Promise<string> {
   }
 
   if (conError.name === 'FunctionsFetchError') {
-    return 'No se pudo contactar el servidor. Verifica que la edge function esté desplegada en Supabase y que la URL del proyecto sea correcta.'
+    return 'No se pudo contactar el servidor. Intenta de nuevo más tarde.'
   }
 
   return conError.message ?? 'Error desconocido'
@@ -260,7 +260,7 @@ export async function registrarse(cuerpo: RegistrarseCuerpo): Promise<void> {
     }
     if (/(sign.?up|signups?|not allowed|registr)/.test(bajo)) {
       throw new Error(
-        'El registro no está habilitado en Supabase. Activa "Allow new users to sign up" e intenta de nuevo.',
+        'El registro no está habilitado. Contacta al administrador.',
       )
     }
     throw new Error(mensaje)

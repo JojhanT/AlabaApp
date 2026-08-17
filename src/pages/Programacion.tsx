@@ -169,9 +169,15 @@ export default function Programacion() {
         }
         return filtered
       })
+      setRepEdit((prev) => {
+        const next = { ...prev }
+        delete next[dia]
+        return next
+      })
     } catch {
       setError('No se pudo guardar el repertorio. Intenta de nuevo.')
     } finally {
+      setRepGuardando(null)
     }
   }
 
