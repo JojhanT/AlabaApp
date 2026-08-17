@@ -94,8 +94,8 @@ export default function Programacion() {
         roles: rolesData,
         conteos: conteosData,
       })
-    } catch (e) {
-      if (!cache) setError((e as Error).message)
+    } catch {
+      if (!cache) setError('No se pudo cargar la programación. Verifica tu conexión.')
       else setSinConexion(true)
     } finally {
       setCargando(false)
@@ -119,8 +119,8 @@ export default function Programacion() {
       setNoAsignados(resultado.noAsignados)
       setMensaje(`Programación generada correctamente (${resultado.asignaciones.length} asignaciones).`)
       await cargar()
-    } catch (e) {
-      setError((e as Error).message)
+    } catch {
+      setError('No se pudo generar la programación. Verifica que tengas permisos de administrador.')
     } finally {
       setGenerando(false)
     }
@@ -175,10 +175,9 @@ export default function Programacion() {
         }
         return filtered
       })
-    } catch (e) {
-      setError((e as Error).message)
+    } catch {
+      setError('No se pudo guardar el repertorio. Intenta de nuevo.')
     } finally {
-      setRepGuardando(null)
     }
   }
 

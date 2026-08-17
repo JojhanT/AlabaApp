@@ -45,14 +45,14 @@ export default function AdminUsuarios() {
       const mapa: Record<string, number[]> = {}
       for (const p of ps) mapa[p.id] = await obtenerRolesDePerfil(p.id)
       setRolesPerfil(mapa)
-    } catch (e) {
-      setError('Error al cargar usuarios: ' + (e as Error).message)
+    } catch {
+      setError('No se pudieron cargar los usuarios. Verifica tu conexión.')
     }
     try {
       const rs = await obtenerRoles()
       setRoles(rs)
-    } catch (e) {
-      setRolesError((e as Error).message)
+    } catch {
+      setRolesError('No se pudieron cargar los roles.')
     } finally {
       setCargando(false)
     }
@@ -95,8 +95,8 @@ export default function AdminUsuarios() {
       setMensaje(`Usuario ${form.nombre} creado correctamente.`)
       setForm({ codigo: '', nombre: '', celular: '', roles: new Set() })
       await cargar()
-    } catch (e) {
-      setError((e as Error).message)
+    } catch {
+      setError('No se pudo crear el usuario. Verifica que el código no esté en uso.')
     } finally {
       setCreando(false)
     }
@@ -125,8 +125,8 @@ export default function AdminUsuarios() {
           : (m[perfilId] ?? []).filter((r) => r !== rolId)
         return { ...m, [perfilId]: actualizado }
       })
-    } catch (e) {
-      setError((e as Error).message)
+    } catch {
+      setError('No se pudieron actualizar los roles.')
     } finally {
       setGuardando(null)
     }
@@ -138,7 +138,7 @@ export default function AdminUsuarios() {
     const { error } = await supabase.from('profiles').update({ is_admin: valor }).eq('id', perfilId)
     setGuardando(null)
     if (error) {
-      setError(error.message)
+      setError('No se pudo actualizar el administrador.')
       return
     }
     setPerfiles((ps) => ps.map((p) => (p.id === perfilId ? { ...p, is_admin: valor } : p)))
@@ -153,7 +153,7 @@ export default function AdminUsuarios() {
       .eq('id', perfilId)
     setGuardando(null)
     if (error) {
-      setError(error.message)
+      setError('No se pudo cambiar el estado de la cuenta.')
       return
     }
     setPerfiles((ps) => ps.map((p) => (p.id === perfilId ? { ...p, is_activo: valor } : p)))
@@ -171,7 +171,7 @@ export default function AdminUsuarios() {
       .eq('id', perfilId)
     setGuardando(null)
     if (error) {
-      setError(error.message)
+      setError('No se pudieron guardar los datos.')
       return
     }
     setPerfiles((ps) =>
@@ -246,8 +246,8 @@ export default function AdminUsuarios() {
           {roles.length === 0 ? (
             <p className="aviso">
               {rolesError
-                ? `No se pudieron cargar los roles: ${rolesError}`
-                : 'No se encontraron roles. Verifica la tabla "roles" en Supabase y recarga.'}
+                ? 'No se pudieron cargar los roles. Verifica tu conexión.'
+                : 'No se encontraron roles. Intenta recargar la página.'}
             </p>
           ) : (
             <div className="roles-check">
@@ -406,8 +406,8 @@ function UsuarioFila({
               {roles.length === 0 ? (
                 <p className="aviso">
                   {rolesError
-                    ? `No se pudieron cargar los roles: ${rolesError}`
-                    : 'No se encontraron roles. Verifica la tabla "roles" en Supabase y recarga.'}
+                    ? 'No se pudieron cargar los roles. Verifica tu conexión.'
+                    : 'No se encontraron roles. Intenta recargar la página.'}
                 </p>
               ) : (
                 <div className="roles-check">

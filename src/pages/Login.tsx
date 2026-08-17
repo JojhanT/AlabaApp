@@ -52,8 +52,8 @@ export default function Login() {
       setCodigo(registro.codigo)
       setRegistro({ codigo: '', nombre: '', celular: '' })
       setMostrarRegistro(false)
-    } catch (e) {
-      setError((e as Error).message)
+    } catch {
+      setError('No se pudo completar el registro. Verifica tu conexión e intenta de nuevo.')
     } finally {
       setRegistrando(false)
     }

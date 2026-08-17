@@ -33,8 +33,8 @@ export default function Disponibilidad() {
       setVotos(propios)
       setRoles(rolesData)
       setMisRoles(rolesPerfil)
-    } catch (e) {
-      setError((e as Error).message)
+    } catch {
+      setError('No se pudieron cargar los datos. Verifica tu conexión.')
     } finally {
       setCargando(false)
     }
@@ -57,10 +57,9 @@ export default function Disponibilidad() {
         else nuevo.add(dia)
         return nuevo
       })
-    } catch (e) {
-      setError((e as Error).message)
+    } catch {
+      setError('No se pudo guardar tu voto. Intenta de nuevo.')
     } finally {
-      setGuardando(null)
     }
   }
 
