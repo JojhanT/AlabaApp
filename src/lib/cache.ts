@@ -42,15 +42,15 @@ export function guardarCacheProgramacion(
   }
 }
 
-export function guardarSemanaSeleccionada(semanaStr: string) {
+export function guardarSemanaSeleccionada(semanaStr: string, clave = CLAVE_SEMANA) {
   try {
-    localStorage.setItem(CLAVE_SEMANA, semanaStr)
+    localStorage.setItem(clave, semanaStr)
   } catch {
     // Almacenamiento no disponible: se ignora.
   }
 }
 
-export function leerSemanaSeleccionada(): string | null {
-  const valor = leerJson<string>(CLAVE_SEMANA)
+export function leerSemanaSeleccionada(clave = CLAVE_SEMANA): string | null {
+  const valor = leerJson<string>(clave)
   return typeof valor === 'string' && valor ? valor : null
 }

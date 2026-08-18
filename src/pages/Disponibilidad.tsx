@@ -9,7 +9,7 @@ import type { Rol } from '../types'
 
 export default function Disponibilidad() {
   const { perfil } = useAuth()
-  const { semana, cambiarSemana } = useSemana()
+  const { semana, cambiarSemana } = useSemana({ claveCache: 'prog_semana_disp', offsetDias: 7 })
   const [votos, setVotos] = useState<Set<DiaSemana>>(new Set())
   const [roles, setRoles] = useState<Rol[]>([])
   const [misRoles, setMisRoles] = useState<number[]>([])
