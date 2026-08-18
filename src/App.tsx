@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Disponibilidad from './pages/Disponibilidad'
 import Programacion from './pages/Programacion'
 import AdminUsuarios from './pages/AdminUsuarios'
+import Votos from './pages/Votos'
 import type { ReactNode } from 'react'
 
 function RutaProtegida({ children }: { children: ReactNode }) {
@@ -56,6 +57,14 @@ export default function App() {
               element={
                 <RutaAdmin>
                   <AdminUsuarios />
+                </RutaAdmin>
+              }
+            />
+            <Route
+              path="/votos"
+              element={
+                <RutaAdmin>
+                  <Votos />
                 </RutaAdmin>
               }
             />

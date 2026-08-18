@@ -55,6 +55,11 @@ export default function Layout() {
               Programación
             </NavLink>
             {esAdmin && (
+              <NavLink to="/votos" onClick={cerrarMenu}>
+                Votos
+              </NavLink>
+            )}
+            {esAdmin && (
               <NavLink to="/admin" onClick={cerrarMenu}>
                 Usuarios
               </NavLink>
