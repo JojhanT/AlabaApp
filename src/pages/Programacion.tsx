@@ -246,10 +246,10 @@ export default function Programacion() {
                   {noAsignados[dia].map((id) => nombreDeId(perfiles, id)).join(', ')}
                 </p>
               )}
-              {totalPorDia(dia) > 0 && repDe(dia) && (
+              {totalPorDia(dia) > 0 && (
                 <div className="repertorio-seccion">
                   <label className="repertorio-label">Repertorio</label>
-                  {esAdmin ? (
+                  {(!repDe(dia) || esAdmin) ? (
                     <>
                       <textarea
                         className="repertorio-textarea"
