@@ -232,6 +232,24 @@ p {
     font-size: 0.9rem;
     line-height: 1.2;
   }
+
+  .chip {
+    font-size: 0.78rem;
+    padding: 0.18rem 0.45rem;
+  }
+
+  .badge-persona {
+    font-size: 0.8rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  .rol-miembros {
+    gap: 0.3rem;
+  }
+
+  .ver-mas-btn {
+    font-size: 0.78rem;
+  }
 }
 
 .contenido {
@@ -549,6 +567,146 @@ p {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+/* ---------- Modo edición programación ---------- */
+.acciones-admin {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filtro-dia {
+  position: relative;
+  margin-bottom: 0.5rem;
+}
+
+.filtro-input {
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  background: var(--fondo);
+  color: var(--texto);
+}
+.filtro-input:focus {
+  outline: none;
+  border-color: var(--primario);
+  box-shadow: 0 0 0 3px var(--primario-suave);
+}
+.filtro-input::placeholder {
+  color: #9ca3af;
+}
+
+.filtro-clear {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: #9ca3af;
+  cursor: pointer;
+  line-height: 1;
+}
+.filtro-clear:hover {
+  color: var(--texto);
+}
+
+/* ---------- Badge persona (editor de programación) ---------- */
+.badge-persona {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1.5px solid var(--borde);
+  background: var(--fondo);
+  color: var(--texto);
+}
+.badge-persona:hover {
+  border-color: var(--primario);
+  background: #f5f3ff;
+}
+
+.badge-persona input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primario);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.badge-persona.badge-asignado {
+  background: var(--primario);
+  color: #fff;
+  border-color: var(--primario);
+}
+.badge-persona.badge-asignado:hover {
+  background: var(--primario-oscuro, #4338ca);
+}
+
+.badge-nombre {
+  white-space: nowrap;
+}
+
+.badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-verde {
+  background: #22c55e;
+}
+
+.dot-rojo {
+  background: #ef4444;
+}
+
+.badge-no-soft .badge-nombre {
+  opacity: 0.75;
+}
+
+.checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ver-mas-btn {
+  font-size: 0.82rem;
+  color: var(--primario);
+  margin-top: 0.15rem;
+}
+
+.btn-sm {
+  font-size: 0.82rem;
+  padding: 0.25rem 0.6rem;
+}
+
+/* ---------- Día extra (agregar día especial) ---------- */
+.agregar-dia-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border-style: dashed;
+  border-color: var(--primario);
+  opacity: 0.85;
+}
+
+.agregar-dia-titulo {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--primario);
+  margin: 0;
 }
 
 /* ---------- Formularios ---------- */
