@@ -89,28 +89,16 @@ export default function Programacion() {
     const cache = leerCacheSemana(semanaStr)
     const fresca = esCacheFresca(semanaStr)
 
-    // Hidratación desde cache (stale-while-revalidate)
+    // Hidratación desde cache (stale-while-revalidate): mostrar cache al instante y revalidar en background
     if (cache && !opts.force) {
       aplicarCache(cache)
       setCargando(false)
-      if (fresca && navigator.onLine) {
-        // Cache fresca: no consultar servidor para reducir consultas
-        // Si el cache es antiguo y no tiene rolesPerfil, completarlo en background sin bloquear
-        if (!cache.rolesPerfil) {
-          void obtenerMapaRoles()
-            .then((mapa) => {
-              setRolesPerfil(mapa)
-              guardarCacheProgramacion(semanaStr, { ...cache, rolesPerfil: mapa })
-            })
-            .catch(() => {})
-        }
-        return
-      }
       if (!navigator.onLine) {
         if (!fresca) setError('Sin conexión. Mostrando datos en caché (pueden estar desactualizados).')
         return
       }
-      // Si no es fresca, continuamos a refrescar en background (cargando ya false, se verá actualización silenciosa)
+      // Aunque esté fresca, revalidar en background para que otros dispositivos vean cambios tras guardar.
+      // No retornamos: seguimos al fetch (sin spinner, ya se hidrato)
     } else {
       setCargando(true)
       if (!navigator.onLine) {

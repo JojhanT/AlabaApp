@@ -49,12 +49,11 @@ export default function Disponibilidad() {
       const g = leerCacheGlobal()
       if (g) setRoles(g.roles)
       setCargando(false)
-      if (fresca && navigator.onLine) return
       if (!navigator.onLine) {
         if (!fresca) setError('Sin conexión. Mostrando tu disponibilidad en caché (puede estar desactualizada).')
         return
       }
-      // stale-while-revalidate: sigue a fetch en background
+      // Aunque esté fresca, revalidar en background para que cambios desde otro dispositivo se vean tras refrescar
     } else {
       setCargando(true)
       if (!navigator.onLine) {
