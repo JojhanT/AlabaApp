@@ -39,23 +39,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [perfil, setPerfil] = useState<Perfil | null>(null)
 
   async function cargarPerfil(userId: string): Promise<boolean> {
+    // Intentar cache local para offline
+    const cacheKey = `perfil_${userId}`
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle()
-      if (error) return true
+      if (error) throw error
       const perfilData = (data as Perfil) ?? null
       if (perfilData && perfilData.is_activo === false) {
         await supabase.auth.signOut()
         setSesion(null)
         setPerfil(null)
+        try {
+          localStorage.removeItem(cacheKey)
+        } catch {
+          /* ignorar */
+        }
         return false
       }
-      setPerfil(perfilData)
+      if (perfilData) {
+        setPerfil(perfilData)
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(perfilData))
+        } catch {
+          /* ignorar */
+        }
+      }
       return true
     } catch {
+      // Fallback a cache si hay offline
+      try {
+        const raw = localStorage.getItem(cacheKey)
+        if (raw) {
+          const cached = JSON.parse(raw) as Perfil
+          setPerfil(cached)
+          return true
+        }
+      } catch {
+        /* ignorar */
+      }
       return true
     }
   }
@@ -63,22 +88,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let activo = true
 
-    supabase.auth.getSession().then(({ data }) => {
+    ;(async () => {
+      const { data } = await supabase.auth.getSession()
       if (!activo) return
       const session = data?.session ?? sesionDesdeStorage()
       if (session) {
         setSesion(session)
-        setCargando(false)
-        void cargarPerfil(session.user.id)
+        await cargarPerfil(session.user.id)
+        if (activo) setCargando(false)
       } else {
-        setCargando(false)
+        if (activo) setCargando(false)
       }
-    })
+    })()
 
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         setSesion(session)
-        void cargarPerfil(session.user.id)
+        setCargando(true)
+        await cargarPerfil(session.user.id)
+        setCargando(false)
       } else if (event === 'TOKEN_REFRESHED' && session) {
         setSesion(session)
       } else if (event === 'SIGNED_OUT') {
