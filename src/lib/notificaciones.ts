@@ -17,11 +17,11 @@ export function tienePermiso(): boolean {
   return typeof Notification !== 'undefined' && Notification.permission === 'granted'
 }
 
-async function mostrarViaSW(titulo: string, body: string, tag: string) {
+async function mostrarViaSW(titulo: string, body: string, tag: string, url: string) {
   try {
     if ('serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.ready
-      // @ts-ignore - getRegistration may not be typed
+      // @ts-ignore
       if (reg?.showNotification) {
         await reg.showNotification(titulo, {
           body,
@@ -29,6 +29,7 @@ async function mostrarViaSW(titulo: string, body: string, tag: string) {
           badge: '/favicon-192.png',
           tag,
           renotify: false,
+          data: { url },
         } as unknown as NotificationOptions)
         return true
       }
@@ -39,19 +40,41 @@ async function mostrarViaSW(titulo: string, body: string, tag: string) {
   return false
 }
 
-export async function mostrarNotificacion(titulo: string, body: string, tag = titulo) {
+function navegarA(url: string) {
+  try {
+    if (window.location.pathname !== url) {
+      window.location.hash = ''
+      window.location.href = url
+    } else {
+      window.focus()
+    }
+  } catch {
+    window.location.href = url
+  }
+}
+
+export async function mostrarNotificacion(titulo: string, body: string, tag = titulo, url: string = '/') {
   if (!tienePermiso()) {
     const ok = await pedirPermisoNotificaciones()
     if (!ok) return
   }
-  const viaSW = await mostrarViaSW(titulo, body, tag)
-  if (!viaSW) {
-    try {
-      new Notification(titulo, { body, icon: '/favicon-192.png', tag } as NotificationOptions)
-    } catch {
-      /* ignorar */
+  // Preferir Notification directa para poder manejar onclick -> navegación
+  try {
+    const n = new Notification(titulo, { body, icon: '/favicon-192.png', tag } as unknown as NotificationOptions)
+    n.onclick = () => {
+      try {
+        window.focus()
+        navegarA(url)
+        n.close()
+      } catch {
+        window.location.href = url
+      }
     }
+    return
+  } catch {
+    /* fallback a SW si estamos en background o falla */
   }
+  await mostrarViaSW(titulo, body, tag, url)
 }
 
 // ── Programación generada ──────────────────────────────────
@@ -83,7 +106,7 @@ export async function notificarProgramacionGenerada(
   roles: { id: number; nombre: string }[],
 ) {
   if (asignaciones.length === 0) {
-    await mostrarNotificacion('Programación generada', 'No saliste programado esta semana. ¡Revisa la app!', 'prog-generada-vacia')
+    await mostrarNotificacion('Programación generada', 'No saliste programado esta semana. ¡Revisa la app!', 'prog-generada-vacia', '/programacion')
     return
   }
   const porDia: Record<string, string[]> = {}
@@ -94,7 +117,7 @@ export async function notificarProgramacionGenerada(
   }
   const partes = Object.entries(porDia).map(([dia, roles]) => `${dia} (${roles.join(', ')})`)
   const body = `Saliste en: ${partes.join(' · ')}`
-  await mostrarNotificacion('¡Nueva programación generada!', body, 'prog-generada')
+  await mostrarNotificacion('¡Nueva programación generada!', body, 'prog-generada', '/programacion')
 }
 
 // ── Recordatorio viernes ───────────────────────────────────
@@ -130,5 +153,6 @@ export async function notificarRecordatorioViernes() {
     '¿Ya votaste tu disponibilidad?',
     'Aún no has votado para la siguiente semana. Entra a AlabaApp y marca tus días antes del domingo.',
     'recordatorio-viernes',
+    '/',
   )
 }

@@ -174,7 +174,10 @@ export function useNotificacionPersonalizada() {
           const dest = row.destinatarios
           if (dest !== null && !dest.includes(perfil.id)) return
           const { mostrarNotificacion } = await import('../lib/notificaciones')
-          await mostrarNotificacion(row.titulo, row.cuerpo, `custom-${payload.commit_timestamp ?? Date.now()}`)
+          const texto = `${row.titulo} ${row.cuerpo}`.toLowerCase()
+          const esDisponibilidad = /vota|disponibilidad|encuesta/.test(texto)
+          const url = esDisponibilidad ? '/' : '/programacion'
+          await mostrarNotificacion(row.titulo, row.cuerpo, `custom-${payload.commit_timestamp ?? Date.now()}`, url)
         })
         .subscribe()
     } catch {
