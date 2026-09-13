@@ -6,7 +6,6 @@ import { useSemana } from '../hooks/useSemana'
 import { toDateString } from '../lib/dias'
 import { obtenerPerfiles, obtenerRoles, obtenerProgramacionSemana, obtenerMapaRoles } from '../lib/api'
 import type { Perfil, Rol } from '../types'
-import { mostrarNotificacion } from '../lib/notificaciones'
 
 type Modo = 'todos' | 'rol' | 'dia' | 'personas'
 
@@ -124,8 +123,6 @@ export default function AdminNotificaciones() {
         filtros: { modo, rolesSel, diaSel, semana: toDateString(semana) },
       })
       if (error) throw new Error(error.message)
-      // Feedback local inmediato para el admin
-      await mostrarNotificacion('Notificación enviada', `${titulo} — a ${dest === null ? 'todos' : dest.length + ' personas'}`, 'notif-enviada')
       setMsg(`Enviada a ${dest === null ? 'todos' : dest.length + ' integrantes'} correctamente.`)
       // No limpiamos todo para permitir reenvío rápido
     } catch (e) {

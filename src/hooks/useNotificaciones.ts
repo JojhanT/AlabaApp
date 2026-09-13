@@ -166,18 +166,25 @@ export function useNotificacionPersonalizada() {
   useEffect(() => {
     if (!perfil) return
     let canal: ReturnType<typeof supabase.channel> | null = null
+    const vistos = new Set<string>()
     try {
       canal = supabase
         .channel(`notif-custom-${perfil.id}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificaciones' }, async (payload) => {
-          const row = payload.new as { titulo: string; cuerpo: string; destinatarios: string[] | null }
+          const row = payload.new as { id: string; titulo: string; cuerpo: string; destinatarios: string[] | null; creado_por: string }
+          // No notificar al propio creador de su envío
+          if (row.creado_por === perfil.id) return
           const dest = row.destinatarios
           if (dest !== null && !dest.includes(perfil.id)) return
+          const id = (payload as unknown as { commit_timestamp?: string })?.commit_timestamp ?? row.id
+          if (vistos.has(id)) return
+          vistos.add(id)
+          window.setTimeout(() => vistos.delete(id), 60000)
           const { mostrarNotificacion } = await import('../lib/notificaciones')
           const texto = `${row.titulo} ${row.cuerpo}`.toLowerCase()
           const esDisponibilidad = /vota|disponibilidad|encuesta/.test(texto)
           const url = esDisponibilidad ? '/' : '/programacion'
-          await mostrarNotificacion(row.titulo, row.cuerpo, `custom-${payload.commit_timestamp ?? Date.now()}`, url)
+          await mostrarNotificacion(row.titulo, row.cuerpo, `custom-${id}`, url)
         })
         .subscribe()
     } catch {
