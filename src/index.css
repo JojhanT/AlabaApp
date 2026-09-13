@@ -69,6 +69,39 @@ p {
   flex-direction: column;
 }
 
+.offline-banner {
+  background: #fef3c7;
+  color: #92400e;
+  border-bottom: 1px solid #fde68a;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.offline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  flex-shrink: 0;
+  animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 .navbar {
   background: var(--tarjeta);
   border-bottom: 1px solid var(--borde);
@@ -699,7 +732,14 @@ p {
   gap: 0.4rem;
   border-style: dashed;
   border-color: var(--primario);
-  opacity: 0.85;
+  /* que ocupe todo el ancho del grid en Programacion */
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 700px) {
+  .agregar-dia-card {
+    grid-column: span 2;
+  }
 }
 
 .agregar-dia-titulo {
@@ -995,10 +1035,10 @@ p {
   border-radius: 10px;
   padding: 0.6rem;
   box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+  overflow: hidden;
 }
 
 .calendario-mini-header {
-  text-transform: capitalize;
   font-weight: 700;
   font-size: 0.85rem;
   color: var(--texto);

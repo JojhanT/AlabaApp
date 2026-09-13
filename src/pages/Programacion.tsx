@@ -792,7 +792,10 @@ export default function Programacion() {
               {/* Calendario bonito limitado a la semana */}
               <div className="calendario-mini" style={{ marginTop: '0.6rem' }}>
                 <div className="calendario-mini-header">
-                  {semana.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+                  {(() => {
+                    const s = semana.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+                    return s.charAt(0).toUpperCase() + s.slice(1)
+                  })()}
                 </div>
                 <div className="calendario-mini-grid">
                   {Array.from({ length: 7 }, (_, i) => {

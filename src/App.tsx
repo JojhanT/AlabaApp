@@ -5,8 +5,23 @@ import Login from './pages/Login'
 import Disponibilidad from './pages/Disponibilidad'
 import Programacion from './pages/Programacion'
 import AdminUsuarios from './pages/AdminUsuarios'
+import AdminNotificaciones from './pages/AdminNotificaciones'
 import Votos from './pages/Votos'
+import {
+  useNotificacionProgramacion,
+  useRecordatorioViernes,
+  usePedirPermisoNotificaciones,
+  useNotificacionPersonalizada,
+} from './hooks/useNotificaciones'
 import type { ReactNode } from 'react'
+
+function NotificacionesRoot() {
+  usePedirPermisoNotificaciones()
+  useNotificacionProgramacion()
+  useNotificacionPersonalizada()
+  useRecordatorioViernes()
+  return null
+}
 
 function RutaProtegida({ children }: { children: ReactNode }) {
   const { cargando, sesion } = useAuth()
@@ -33,6 +48,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <NotificacionesRoot />
         <Routes>
           <Route path="/login" element={<RutaLogin />} />
           <Route element={<Layout />}>
@@ -65,6 +81,14 @@ export default function App() {
               element={
                 <RutaAdmin>
                   <Votos />
+                </RutaAdmin>
+              }
+            />
+            <Route
+              path="/admin/notificaciones"
+              element={
+                <RutaAdmin>
+                  <AdminNotificaciones />
                 </RutaAdmin>
               }
             />
