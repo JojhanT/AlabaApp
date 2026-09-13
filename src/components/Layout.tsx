@@ -25,6 +25,13 @@ export default function Layout() {
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [saliendo, setSaliendo] = useState(false)
   const [permiso, setPermiso] = useState(() => (typeof Notification !== 'undefined' ? Notification.permission : 'default'))
+  const [bannerNotifDismiss, setBannerNotifDismiss] = useState(() => {
+    try {
+      return localStorage.getItem('notif_banner_dismissed') === '1'
+    } catch {
+      return false
+    }
+  })
   const online = useOnline()
 
   async function activarNotis() {
@@ -32,10 +39,30 @@ export default function Layout() {
     setPermiso(Notification.permission)
     if (ok) {
       try {
-        new Notification('Notificaciones activadas', { body: 'Recibirás avisos de programación y recordatorios.' })
+        if ('Notification' in window && Notification.permission === 'granted') {
+          // Intentar mostrar una de prueba vía SW o directa
+          if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.ready
+            await (reg as unknown as { showNotification: (t: string, o: unknown) => Promise<void> }).showNotification('Notificaciones activadas', {
+              body: 'Recibirás avisos de programación y recordatorios de votación.',
+              icon: '/favicon-192.png',
+            } as unknown as NotificationOptions)
+          } else {
+            new Notification('Notificaciones activadas', { body: 'Recibirás avisos de programación y recordatorios.' })
+          }
+        }
       } catch {
         /* ignorar */
       }
+    }
+  }
+
+  function dismissBanner() {
+    setBannerNotifDismiss(true)
+    try {
+      localStorage.setItem('notif_banner_dismissed', '1')
+    } catch {
+      /* ignorar */
     }
   }
 
@@ -67,6 +94,19 @@ export default function Layout() {
         <div className="offline-banner" role="status" aria-live="polite">
           <span className="offline-dot" />
           Sin internet — mostrando <strong>programación local</strong> (puede estar desactualizada). Tus cambios se guardarán al reconectar.
+        </div>
+      )}
+      {typeof Notification !== 'undefined' && permiso === 'default' && !bannerNotifDismiss && (
+        <div className="notif-banner" role="status" aria-live="polite">
+          <span className="notif-banner-text">🔔 Activa las notificaciones para recibir tu programación y el recordatorio del viernes si aún no votaste</span>
+          <div className="notif-banner-acciones">
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => void activarNotis()}>
+              Activar
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={dismissBanner}>
+              Ahora no
+            </button>
+          </div>
         </div>
       )}
       <header className="navbar">
@@ -109,13 +149,13 @@ export default function Layout() {
               <span className="chip">{perfil?.nombre ?? '…'}</span>
               {esAdmin && <span className="chip chip-admin">Admin</span>}
               {typeof Notification !== 'undefined' && permiso !== 'granted' && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => void activarNotis()} title="Activar notificaciones">
+                <button type="button" className="notif-bell" onClick={() => void activarNotis()} title="Activar notificaciones" aria-label="Activar notificaciones">
                   🔔
                 </button>
               )}
               {typeof Notification !== 'undefined' && permiso === 'granted' && (
-                <span className="chip" title="Notificaciones activadas" style={{ fontSize: '0.75rem' }}>
-                  🔔 ✓
+                <span className="notif-bell notif-bell-activa" title="Notificaciones activadas" aria-label="Notificaciones activadas">
+                  🔔
                 </span>
               )}
               <button

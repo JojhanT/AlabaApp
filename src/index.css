@@ -102,6 +102,59 @@ p {
   }
 }
 
+.notif-bell {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--borde);
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.notif-bell:hover {
+  background: var(--primario-suave);
+  border-color: var(--primario);
+}
+
+.notif-bell-activa {
+  background: var(--ok-fondo);
+  border-color: #c9ecd4;
+  cursor: default;
+}
+
+.notif-banner {
+  background: #eef0fe;
+  border-bottom: 1px solid #d7dbff;
+  color: var(--texto);
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.notif-banner-text {
+  flex: 1;
+  min-width: 200px;
+  text-align: center;
+}
+
+.notif-banner-acciones {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
 .navbar {
   background: var(--tarjeta);
   border-bottom: 1px solid var(--borde);
