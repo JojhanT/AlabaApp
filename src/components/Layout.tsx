@@ -179,7 +179,7 @@ export default function Layout() {
               </NavLink>
             )}
             {esAdmin && (
-              <NavLink to="/admin" onClick={cerrarMenu}>
+              <NavLink to="/admin" end onClick={cerrarMenu}>
                 Usuarios
               </NavLink>
             )}
