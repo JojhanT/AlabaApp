@@ -987,3 +987,102 @@ p {
   flex-wrap: wrap;
   margin-left: 0.2rem;
 }
+
+/* ---------- Calendario mini semana ---------- */
+.calendario-mini {
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 0.6rem;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+}
+
+.calendario-mini-header {
+  text-transform: capitalize;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--texto);
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.calendario-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+}
+
+.cal-dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.45rem 0.25rem;
+  border-radius: 10px;
+  border: 1.5px solid var(--borde);
+  background: var(--fondo);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  font: inherit;
+  color: var(--texto);
+}
+
+.cal-dia:hover {
+  border-color: var(--primario);
+  background: #f5f3ff;
+  transform: translateY(-1px);
+}
+
+.cal-dia-seleccionado {
+  background: var(--primario) !important;
+  color: #fff !important;
+  border-color: var(--primario) !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.cal-dia-seleccionado .cal-dia-sem,
+.cal-dia-seleccionado .cal-dia-num {
+  color: #fff;
+}
+
+.cal-dia-sem {
+  font-size: 0.68rem;
+  text-transform: capitalize;
+  color: var(--texto-suave);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.cal-dia-num {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cal-dia-punto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  position: absolute;
+  bottom: 4px;
+}
+
+.cal-dia-seleccionado .cal-dia-punto {
+  background: #fff;
+}
+
+.cal-seleccionado {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: var(--texto-suave);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  background: var(--primario-suave);
+  border: 1px solid #d7dbff;
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+}

@@ -31,14 +31,16 @@ export interface Asignacion {
 }
 
 export interface EntradaPlanificacion {
-  votosPorDia: Record<DiaSemana, string[]>
+  votosPorDia: Record<string, string[]>
   rolesPorPerfil: Record<string, number[]>
   conteos: Record<number, Record<string, number>>
+  /** Si se provee, se genera solo para esos días (orden respetado). Si no, usa DIAS_SEMANA. */
+  dias?: string[]
 }
 
 export interface ResultadoPlanificacion {
-  dias: Record<DiaSemana, Asignacion[]>
-  noAsignados: Record<DiaSemana, string[]>
+  dias: Record<string, Asignacion[]>
+  noAsignados: Record<string, string[]>
 }
 
 // Cuántas personas se asignan por rol cada día.
@@ -72,10 +74,15 @@ function compararPorConteo(conteos: Record<string, number>) {
 }
 
 export function calcularProgramacion(entrada: EntradaPlanificacion): ResultadoPlanificacion {
-  const dias: Record<DiaSemana, Asignacion[]> = { Martes: [], Jueves: [], Sabado: [], Domingo: [] }
-  const noAsignados: Record<DiaSemana, string[]> = { Martes: [], Jueves: [], Sabado: [], Domingo: [] }
+  const listaDias = entrada.dias && entrada.dias.length > 0 ? entrada.dias : [...DIAS_SEMANA]
+  const dias: Record<string, Asignacion[]> = {}
+  const noAsignados: Record<string, string[]> = {}
+  for (const d of listaDias) {
+    dias[d] = []
+    noAsignados[d] = []
+  }
 
-  for (const dia of DIAS_SEMANA) {
+  for (const dia of listaDias) {
     const votantes = new Set(entrada.votosPorDia[dia] ?? [])
     const asignados = new Set<string>()
     let liderId: string | null = null

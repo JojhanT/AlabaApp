@@ -7,20 +7,27 @@ import { DIAS_SEMANA, ORDEN_ROL, ROL_EMOJI, type DiaSemana } from '../lib/planif
 import { toDateString, fechaDeDia, formatFechaLarga } from '../lib/dias'
 import {
   guardarCacheProgramacion,
-  leerCacheProgramaciones,
+  leerCacheSemana,
+  esCacheFresca,
+  invalidarCacheProgramacion,
+  leerCacheGlobal,
+  guardarCacheGlobal,
   type CacheSemana,
 } from '../lib/cache'
 import {
   generarProgramacionSemana,
   obtenerConteosHistoricos,
+  obtenerDiasConfig,
+  guardarDiasConfig,
   obtenerPerfiles,
   obtenerProgramacionSemana,
   obtenerRepertorios,
   obtenerRoles,
-  obtenerRolesDePerfil,
+  obtenerMapaRoles,
   obtenerVotosSemana,
   guardarRepertorio,
   nombreDeId,
+  type DiaConfig,
 } from '../lib/api'
 import type { Perfil, ProgramacionRow, RepertorioDia, Rol } from '../types'
 
@@ -43,42 +50,26 @@ export default function Programacion() {
   const [rolesPerfil, setRolesPerfil] = useState<Record<string, number[]>>({})
   const [cargando, setCargando] = useState(true)
   const [generando, setGenerando] = useState(false)
+  const [guardando, setGuardando] = useState(false)
   const [mensaje, setMensaje] = useState('')
   const [error, setError] = useState('')
   const [verContadores, setVerContadores] = useState(false)
   const [limiteContadores, setLimiteContadores] = useState(15)
-  const [noAsignados, setNoAsignados] = useState<Record<DiaSemana, string[]>>({
-    Martes: [],
-    Jueves: [],
-    Sabado: [],
-    Domingo: [],
-  })
+  const [noAsignados, setNoAsignados] = useState<Record<string, string[]>>({})
   const [repertorios, setRepertorios] = useState<RepertorioDia[]>([])
   const [repEdit, setRepEdit] = useState<Record<string, string>>({})
   const [repGuardando, setRepGuardando] = useState<string | null>(null)
-  const [votosPorDia, setVotosPorDia] = useState<Record<string, string[]>>({
-    Martes: [],
-    Jueves: [],
-    Sabado: [],
-    Domingo: [],
-  })
+  const [votosPorDia, setVotosPorDia] = useState<Record<string, string[]>>({})
+
+  // ── Dias configurados ───────────────────────────────────────
+  const [diasConfig, setDiasConfig] = useState<DiaConfig[]>([])
 
   // ── Edit mode ──────────────────────────────────────────────
   const [editing, setEditing] = useState(false)
-  const [edicion, setEdicion] = useState<Record<string, Record<number, string[]>>>({
-    Martes: {},
-    Jueves: {},
-    Sabado: {},
-    Domingo: {},
-  })
-  const [filtro, setFiltro] = useState<Record<string, string>>({
-    Martes: '',
-    Jueves: '',
-    Sabado: '',
-    Domingo: '',
-  })
+  const [edicion, setEdicion] = useState<Record<string, Record<number, string[]>>>({})
+  const [filtro, setFiltro] = useState<Record<string, string>>({})
   const [rolesExpandidos, setRolesExpandidos] = useState<Set<string>>(new Set())
-  const [diasExtras, setDiasExtras] = useState<DiaExtra[]>([])
+  const [diasEdit, setDiasEdit] = useState<DiaExtra[]>([])
   const [nuevoDiaNombre, setNuevoDiaNombre] = useState('')
   const [nuevoDiaFecha, setNuevoDiaFecha] = useState('')
 
@@ -87,48 +78,117 @@ export default function Programacion() {
     setPerfiles(cache.perfiles)
     setRoles(cache.roles)
     setConteos(cache.conteos)
+    if (cache.diasConfig) setDiasConfig(cache.diasConfig)
+    if (cache.repertorios) setRepertorios(cache.repertorios)
+    if (cache.votosPorDia) setVotosPorDia(cache.votosPorDia)
+    if (cache.rolesPerfil) setRolesPerfil(cache.rolesPerfil)
   }
 
-  async function cargar() {
+  async function cargar(opts: { force?: boolean } = {}) {
     const semanaStr = toDateString(semana)
-    const cache = leerCacheProgramaciones()[semanaStr]
+    const cache = leerCacheSemana(semanaStr)
+    const fresca = esCacheFresca(semanaStr)
 
-    if (cache) {
+    // Hidratación desde cache (stale-while-revalidate)
+    if (cache && !opts.force) {
       aplicarCache(cache)
       setCargando(false)
+      if (fresca && navigator.onLine) {
+        // Cache fresca: no consultar servidor para reducir consultas
+        // Si el cache es antiguo y no tiene rolesPerfil, completarlo en background sin bloquear
+        if (!cache.rolesPerfil) {
+          void obtenerMapaRoles()
+            .then((mapa) => {
+              setRolesPerfil(mapa)
+              guardarCacheProgramacion(semanaStr, { ...cache, rolesPerfil: mapa })
+            })
+            .catch(() => {})
+        }
+        return
+      }
+      if (!navigator.onLine) {
+        if (!fresca) setError('Sin conexión. Mostrando datos en caché (pueden estar desactualizados).')
+        return
+      }
+      // Si no es fresca, continuamos a refrescar en background (cargando ya false, se verá actualización silenciosa)
     } else {
       setCargando(true)
-    }
-
-    if (!navigator.onLine) {
-      setCargando(false)
-      return
+      if (!navigator.onLine) {
+        if (cache) {
+          aplicarCache(cache)
+          setError('Sin conexión. Mostrando datos en caché.')
+        } else {
+          setError('Sin conexión y sin datos en caché para esta semana.')
+        }
+        setCargando(false)
+        return
+      }
     }
 
     try {
-      const [filasData, perfilesData, rolesData, conteosData, repData, votosData] = await Promise.all([
-        obtenerProgramacionSemana(semanaStr),
-        obtenerPerfiles(),
-        obtenerRoles(),
-        obtenerConteosHistoricos(semanaStr),
-        obtenerRepertorios(semanaStr).catch(() => [] as RepertorioDia[]),
-        obtenerVotosSemana(semanaStr).catch(() => ({ porDia: { Martes: [], Jueves: [], Sabado: [], Domingo: [] }, propios: new Set() })),
-      ])
+      // Reusar caché global para perfiles/roles (30 min) para reducir consultas
+      const global = !opts.force ? leerCacheGlobal() : null
+      let perfilesData: Perfil[]
+      let rolesData: Rol[]
+      let filasData: ProgramacionRow[]
+      let conteosData: Record<number, Record<string, number>>
+      let repData: RepertorioDia[]
+      let votosData: { porDia: Record<string, string[]>; propios: Set<string> }
+      let diasData: DiaConfig[]
+      let mapa: Record<string, number[]>
+
+      if (global) {
+        perfilesData = global.perfiles
+        rolesData = global.roles
+        ;[filasData, conteosData, repData, votosData, diasData, mapa] = await Promise.all([
+          obtenerProgramacionSemana(semanaStr),
+          obtenerConteosHistoricos(semanaStr),
+          obtenerRepertorios(semanaStr).catch(() => [] as RepertorioDia[]),
+          obtenerVotosSemana(semanaStr).catch(() => ({ porDia: {} as Record<string, string[]>, propios: new Set<string>() })),
+          obtenerDiasConfig(semanaStr).catch(() => [] as DiaConfig[]),
+          obtenerMapaRoles().catch(() => ({} as Record<string, number[]>)),
+        ])
+      } else {
+        const resultados = await Promise.all([
+          obtenerProgramacionSemana(semanaStr),
+          obtenerPerfiles(),
+          obtenerRoles(),
+          obtenerConteosHistoricos(semanaStr),
+          obtenerRepertorios(semanaStr).catch(() => [] as RepertorioDia[]),
+          obtenerVotosSemana(semanaStr).catch(() => ({ porDia: {} as Record<string, string[]>, propios: new Set<string>() })),
+          obtenerDiasConfig(semanaStr).catch(() => [] as DiaConfig[]),
+          obtenerMapaRoles().catch(() => ({} as Record<string, number[]>)),
+        ])
+        filasData = resultados[0] as ProgramacionRow[]
+        perfilesData = resultados[1] as Perfil[]
+        rolesData = resultados[2] as Rol[]
+        conteosData = resultados[3] as Record<number, Record<string, number>>
+        repData = resultados[4] as RepertorioDia[]
+        votosData = resultados[5] as { porDia: Record<string, string[]>; propios: Set<string> }
+        diasData = resultados[6] as DiaConfig[]
+        mapa = resultados[7] as Record<string, number[]>
+        guardarCacheGlobal(perfilesData, rolesData)
+      }
+
       setFilas(filasData)
       setPerfiles(perfilesData)
       setRoles(rolesData)
       setConteos(conteosData)
       setRepertorios(repData)
       setVotosPorDia(votosData.porDia)
+      setDiasConfig(diasData)
+      setRolesPerfil(mapa)
+
       guardarCacheProgramacion(semanaStr, {
         filas: filasData,
         perfiles: perfilesData,
         roles: rolesData,
         conteos: conteosData,
+        diasConfig: diasData,
+        repertorios: repData,
+        votosPorDia: votosData.porDia,
+        rolesPerfil: mapa,
       })
-      const mapa: Record<string, number[]> = {}
-      for (const p of perfilesData) mapa[p.id] = await obtenerRolesDePerfil(p.id)
-      setRolesPerfil(mapa)
     } catch {
       if (!cache) setError('No se pudo cargar la programación.')
     } finally {
@@ -138,6 +198,7 @@ export default function Programacion() {
 
   useEffect(() => {
     setError('')
+    setMensaje('')
     setEditing(false)
     void cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -152,7 +213,9 @@ export default function Programacion() {
       const resultado = await generarProgramacionSemana(semana)
       setNoAsignados(resultado.noAsignados)
       setMensaje(`Programación generada correctamente (${resultado.asignaciones.length} asignaciones).`)
-      await cargar()
+      // Invalidar cache para forzar refresco fresco y reducir inconsistencia
+      invalidarCacheProgramacion(toDateString(semana))
+      await cargar({ force: true })
     } catch {
       setError('No se pudo generar la programación. Verifica que tengas permisos de administrador.')
     } finally {
@@ -160,28 +223,68 @@ export default function Programacion() {
     }
   }
 
-  // ── Extra days helpers ────────────────────────────────────
+  // ── Helpers para días visibles ─────────────────────────────
   const diasExistentesExtra = Array.from(
     new Set(filas.map((f) => f.dia_semana).filter((d) => !(DIAS_SEMANA as string[]).includes(d))),
   )
 
+  function diasVisiblesActuales(): DiaExtra[] {
+    if (editing) return diasEdit
+    if (diasConfig.length > 0) {
+      return diasConfig.map((d) => ({ nombre: d.dia_semana, fecha: d.fecha }))
+    }
+    // Si no hay dias_config (tabla aún no existe o semana sin config) y hay programación guardada,
+    // derivar los días visibles desde las filas (respeta borrado de días por defecto)
+    if (filas.length > 0) {
+      const mapa = new Map<string, string>()
+      for (const f of filas) {
+        if (!mapa.has(f.dia_semana)) mapa.set(f.dia_semana, f.fecha)
+      }
+      const lista = Array.from(mapa.entries()).map(([nombre, fecha]) => ({ nombre, fecha }))
+      lista.sort((a, b) => a.fecha.localeCompare(b.fecha))
+      return lista
+    }
+    // Fallback legacy: defaults + extras de filas (solo cuando no hay programación aún)
+    const base: DiaExtra[] = DIAS_SEMANA.map((nombre) => ({
+      nombre,
+      fecha: toDateString(fechaDeDia(semana, nombre as DiaSemana)),
+    }))
+    for (const nombre of diasExistentesExtra) {
+      if (!base.find((b) => b.nombre === nombre)) {
+        const fila = filas.find((f) => f.dia_semana === nombre)
+        base.push({ nombre, fecha: fila?.fecha ?? toDateString(semana) })
+      }
+    }
+    return base
+  }
+
+  const diasVisibles = diasVisiblesActuales()
+  const todosDiasVisibles = diasVisibles.map((d) => d.nombre)
+
   function agregarDiaExtra() {
     const nombre = nuevoDiaNombre.trim()
     const fecha = nuevoDiaFecha
-    if (!nombre || !fecha) return
-    if ((DIAS_SEMANA as string[]).includes(nombre)) {
-      setError('Ese nombre ya es un día estándar. Usa otro nombre (ej: "Miércoles", "Domingo PM").')
+    setError('')
+    setMensaje('')
+    if (!nombre || !fecha) {
+      setError('Debes ingresar nombre y fecha para el día especial.')
       return
     }
-    setDiasExtras((prev) => [...prev, { nombre, fecha }])
+    const existe = diasEdit.some((d) => d.nombre.toLowerCase() === nombre.toLowerCase())
+    if (existe) {
+      setError(`Ya existe un día llamado "${nombre}". Usa otro nombre (ej: "${nombre} PM").`)
+      return
+    }
+    setDiasEdit((prev) => [...prev, { nombre, fecha }])
     setEdicion((prev) => ({ ...prev, [nombre]: {} }))
     setFiltro((prev) => ({ ...prev, [nombre]: '' }))
     setNuevoDiaNombre('')
     setNuevoDiaFecha('')
+    setMensaje(`Día "${nombre}" agregado. No olvides asignar integrantes y guardar.`)
   }
 
-  function quitarDiaExtra(nombre: string) {
-    setDiasExtras((prev) => prev.filter((d) => d.nombre !== nombre))
+  function quitarDia(nombre: string) {
+    setDiasEdit((prev) => prev.filter((d) => d.nombre !== nombre))
     setEdicion((prev) => {
       const next = { ...prev }
       delete next[nombre]
@@ -192,38 +295,68 @@ export default function Programacion() {
       delete next[nombre]
       return next
     })
+    setMensaje(`Día "${nombre}" quitado. Recuerda guardar para aplicar cambios.`)
+    setError('')
   }
 
   // ── Edit functions ──────────────────────────────────────────
   function entrarEdicion() {
-    const init: Record<string, Record<number, string[]>> = {
-      Martes: {},
-      Jueves: {},
-      Sabado: {},
-      Domingo: {},
-    }
-    const extras: DiaExtra[] = []
+    const visibles = (() => {
+      if (diasConfig.length > 0) {
+        return diasConfig.map((d) => ({ nombre: d.dia_semana, fecha: d.fecha }))
+      }
+      if (filas.length > 0) {
+        const mapa = new Map<string, string>()
+        for (const f of filas) {
+          if (!mapa.has(f.dia_semana)) mapa.set(f.dia_semana, f.fecha)
+        }
+        const lista = Array.from(mapa.entries()).map(([nombre, fecha]) => ({ nombre, fecha }))
+        lista.sort((a, b) => a.fecha.localeCompare(b.fecha))
+        return lista
+      }
+      const base: DiaExtra[] = DIAS_SEMANA.map((nombre) => ({
+        nombre,
+        fecha: toDateString(fechaDeDia(semana, nombre as DiaSemana)),
+      }))
+      for (const nombre of diasExistentesExtra) {
+        if (!base.find((b) => b.nombre === nombre)) {
+          const fila = filas.find((f) => f.dia_semana === nombre)
+          base.push({ nombre, fecha: fila?.fecha ?? toDateString(semana) })
+        }
+      }
+      return base
+    })()
+
+    const init: Record<string, Record<number, string[]>> = {}
+    for (const d of visibles) init[d.nombre] = {}
     for (const fila of filas) {
       const dia = fila.dia_semana
       if (!init[dia]) init[dia] = {}
       init[dia][fila.rol_id] ??= []
       init[dia][fila.rol_id].push(fila.profile_id)
-      if (!(DIAS_SEMANA as string[]).includes(dia)) {
-        if (!extras.find((e) => e.nombre === dia)) {
-          extras.push({ nombre: dia, fecha: fila.fecha })
-        }
+      if (!visibles.find((v) => v.nombre === dia)) {
+        visibles.push({ nombre: dia, fecha: fila.fecha })
+        init[dia] ??= {}
       }
     }
+    for (const d of visibles) init[d.nombre] ??= {}
+
+    setDiasEdit(visibles)
     setEdicion(init)
-    setDiasExtras(extras)
+    const filtroInit: Record<string, string> = {}
+    for (const d of visibles) filtroInit[d.nombre] = ''
+    setFiltro(filtroInit)
     setEditing(true)
-    setFiltro({ Martes: '', Jueves: '', Sabado: '', Domingo: '' })
     setRolesExpandidos(new Set())
     setError('')
+    setMensaje('')
   }
 
   function cancelarEdicion() {
     setEditing(false)
+    setDiasEdit([])
+    setError('')
+    setMensaje('')
   }
 
   function agregarAlSlot(dia: string, rolId: number, profileId: string) {
@@ -252,8 +385,18 @@ export default function Programacion() {
   async function guardarEdicion() {
     setError('')
     setMensaje('')
+    if (diasEdit.length === 0) {
+      setError('Debe haber al menos un día habilitado.')
+      return
+    }
     const semanaStr = toDateString(semana)
+    setGuardando(true)
     try {
+      await guardarDiasConfig(
+        semanaStr,
+        diasEdit.map((d) => ({ dia_semana: d.nombre, fecha: d.fecha })),
+      )
+
       await supabase.from('programaciones').delete().eq('semana_inicio', semanaStr)
 
       const rows: {
@@ -264,19 +407,12 @@ export default function Programacion() {
         profile_id: string
       }[] = []
 
-      const todosDias = [
-        ...DIAS_SEMANA,
-        ...diasExtras.map((de) => de.nombre),
-      ]
-
-      for (const dia of todosDias) {
+      for (const diaExtra of diasEdit) {
+        const dia = diaExtra.nombre
+        const fecha = diaExtra.fecha
         for (const [rolIdStr, personas] of Object.entries(edicion[dia] ?? {})) {
           const rolId = Number(rolIdStr)
           for (const profileId of personas) {
-            const isExtra = !(DIAS_SEMANA as string[]).includes(dia)
-            const fecha = isExtra
-              ? diasExtras.find((de) => de.nombre === dia)?.fecha ?? toDateString(semana)
-              : toDateString(fechaDeDia(semana, dia as DiaSemana))
             rows.push({
               semana_inicio: semanaStr,
               fecha,
@@ -291,20 +427,49 @@ export default function Programacion() {
         const { error: errIns } = await supabase.from('programaciones').insert(rows)
         if (errIns) throw new Error(errIns.message)
       }
+
+      // Actualizar caché localmente para evitar una consulta extra y mostrar datos frescos al instante
+      const nuevasFilas: ProgramacionRow[] = rows.map((r, i) => ({
+        id: `tmp-${i}`,
+        semana_inicio: r.semana_inicio,
+        fecha: r.fecha,
+        dia_semana: r.dia_semana,
+        rol_id: r.rol_id,
+        profile_id: r.profile_id,
+        created_at: new Date().toISOString(),
+      }))
+      const nuevosDiasConfig: DiaConfig[] = diasEdit.map((d) => ({
+        semana_inicio: semanaStr,
+        dia_semana: d.nombre,
+        fecha: d.fecha,
+      }))
+      setFilas(nuevasFilas)
+      setDiasConfig(nuevosDiasConfig)
+      guardarCacheProgramacion(semanaStr, {
+        filas: nuevasFilas,
+        perfiles,
+        roles,
+        conteos,
+        diasConfig: nuevosDiasConfig,
+        repertorios,
+        votosPorDia,
+        rolesPerfil,
+      })
+
       setEditing(false)
       setMensaje('Programación guardada correctamente.')
-      await cargar()
+      // Forzar refresco en background para validar con servidor (sin bloquear UI)
+      void cargar({ force: true })
     } catch (e) {
       setError((e as Error).message)
+      // En error, invalidar para no dejar caché corrupto
+      invalidarCacheProgramacion(semanaStr)
+    } finally {
+      setGuardando(false)
     }
   }
 
   // ── Derived data ────────────────────────────────────────────
-  const todosDiasVisibles = [
-    ...DIAS_SEMANA,
-    ...diasExistentesExtra,
-  ]
-
   const porDia: Record<string, Agrupado> = {}
   for (const fila of filas) {
     const dia = fila.dia_semana
@@ -317,6 +482,11 @@ export default function Programacion() {
     Object.values(porDia[dia] ?? {}).reduce((acc, arr) => acc + arr.length, 0)
 
   const fechaParaDia = (dia: string): string => {
+    const extra = diasVisibles.find((d) => d.nombre === dia)
+    if (extra?.fecha) {
+      const d = new Date(extra.fecha + 'T12:00:00')
+      return formatFechaLarga(d)
+    }
     if ((DIAS_SEMANA as string[]).includes(dia)) {
       return formatFechaLarga(fechaDeDia(semana, dia as DiaSemana))
     }
@@ -349,20 +519,27 @@ export default function Programacion() {
   }
 
   async function guardarRep(dia: string) {
+    const semanaStr = toDateString(semana)
     const texto = (repEdit[dia] ?? '').trim()
     setRepGuardando(dia)
     try {
-      await guardarRepertorio(toDateString(semana), dia, texto)
+      await guardarRepertorio(semanaStr, dia, texto)
       setRepertorios((prev) => {
         const filtered = prev.filter((r) => r.dia_semana !== dia)
         if (texto) {
           filtered.push({
-            semana_inicio: toDateString(semana),
+            semana_inicio: semanaStr,
             dia_semana: dia,
             repertorio: texto,
             updated_by: null,
             updated_at: new Date().toISOString(),
           })
+        }
+        // Actualizar caché con repertorio nuevo para no reconsultar
+        const nuevos = filtered
+        const cache = leerCacheSemana(semanaStr)
+        if (cache) {
+          guardarCacheProgramacion(semanaStr, { ...cache, repertorios: nuevos })
         }
         return filtered
       })
@@ -373,6 +550,7 @@ export default function Programacion() {
       })
     } catch {
       setError('No se pudo guardar el repertorio. Intenta de nuevo.')
+      invalidarCacheProgramacion(semanaStr)
     } finally {
       setRepGuardando(null)
     }
@@ -384,12 +562,7 @@ export default function Programacion() {
         <h2>Programación de la semana</h2>
         {esAdmin && !editing && (
           <div className="acciones-admin">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => void generar()}
-              disabled={generando}
-            >
+            <button type="button" className="btn btn-primary" onClick={() => void generar()} disabled={generando}>
               {generando ? 'Generando…' : 'Generar programación'}
             </button>
             <button type="button" className="btn btn-secondary" onClick={entrarEdicion}>
@@ -399,14 +572,10 @@ export default function Programacion() {
         )}
         {editing && (
           <div className="acciones-admin">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => void guardarEdicion()}
-            >
-              Guardar
+            <button type="button" className="btn btn-primary" onClick={() => void guardarEdicion()} disabled={guardando}>
+              {guardando ? 'Guardando…' : 'Guardar'}
             </button>
-            <button type="button" className="btn btn-ghost" onClick={cancelarEdicion}>
+            <button type="button" className="btn btn-ghost" onClick={cancelarEdicion} disabled={guardando}>
               Cancelar
             </button>
           </div>
@@ -414,7 +583,7 @@ export default function Programacion() {
       </div>
       <p className="subtitulo">
         {editing
-          ? 'Selecciona el rol de cada día y haz clic en «+ Agregar» para asignar integrantes.'
+          ? 'Quita días que no necesites, agrega días especiales (puedes repetir fecha para varias programaciones el mismo día) y asigna integrantes.'
           : 'Cada semana se genera en automático, procurando un reparto justo según la disponibilidad de cada integrante.'}
       </p>
 
@@ -426,220 +595,256 @@ export default function Programacion() {
         <div className="centrado">Cargando…</div>
       ) : (
         <div className="grid-dias">
-          {todosDiasVisibles.map((dia) => (
-            <div key={dia} className="card dia-card-estatico">
-              <div className="dia-head">
-                <span className="dia-nombre">{dia}</span>
-                <span className="dia-fecha">{fechaParaDia(dia)}</span>
-                {editing && !(DIAS_SEMANA as string[]).includes(dia) && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => quitarDiaExtra(dia)}
-                    style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--error, #dc2626)' }}
-                  >
-                    Quitar día
-                  </button>
-                )}
-              </div>
+          {todosDiasVisibles.length === 0 ? (
+            <div className="card dia-card-estatico">
+              <p className="vacio">No hay días habilitados para esta semana. Agrega uno en modo Modificar.</p>
+            </div>
+          ) : (
+            todosDiasVisibles.map((dia) => (
+              <div key={dia} className="card dia-card-estatico">
+                <div className="dia-head">
+                  <span className="dia-nombre">{dia}</span>
+                  <span className="dia-fecha">{fechaParaDia(dia)}</span>
+                  {editing && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => quitarDia(dia)}
+                      style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--alerta, #dc2626)' }}
+                    >
+                      Quitar día
+                    </button>
+                  )}
+                </div>
 
-              {/* ── Vista normal ──────────────────────────── */}
-              {!editing && (
-                <>
-                  {totalPorDia(dia) === 0 ? (
-                    <p className="vacio">Aún no hay programación para esta fecha.</p>
-                  ) : (
+                {!editing && (
+                  <>
+                    {totalPorDia(dia) === 0 ? (
+                      <p className="vacio">Aún no hay programación para esta fecha.</p>
+                    ) : (
+                      <div className="rol-lista">
+                        {ORDEN_ROL.map((rolId) => {
+                          const filasRol = porDia[dia]?.[rolId] ?? []
+                          if (filasRol.length === 0) return null
+                          const rol = roles.find((r) => r.id === rolId)
+                          return (
+                            <div key={rolId} className="rol-grupo">
+                              <span className="rol-nombre">
+                                {ROL_EMOJI[rolId] ?? ''} {rol?.nombre ?? `Rol ${rolId}`}
+                              </span>
+                              <div className="rol-miembros">
+                                {filasRol.map((f) => (
+                                  <span key={f.id} className="chip">
+                                    {nombreDeId(perfiles, f.profile_id)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {editing && (
+                  <>
+                    <div className="filtro-dia">
+                      <input
+                        type="text"
+                        placeholder="Buscar integrante…"
+                        className="filtro-input"
+                        value={filtro[dia] ?? ''}
+                        onChange={(e) => setFiltro((prev) => ({ ...prev, [dia]: e.target.value }))}
+                      />
+                      {filtro[dia] && (
+                        <button
+                          type="button"
+                          className="filtro-clear"
+                          onClick={() => setFiltro((prev) => ({ ...prev, [dia]: '' }))}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                     <div className="rol-lista">
                       {ORDEN_ROL.map((rolId) => {
-                        const filasRol = porDia[dia]?.[rolId] ?? []
-                        if (filasRol.length === 0) return null
                         const rol = roles.find((r) => r.id === rolId)
+                        const asignados = edicion[dia]?.[rolId] ?? []
+                        const asignadosSet = new Set(asignados)
+                        const texto = (filtro[dia] ?? '').toLowerCase()
+                        const tieneBusqueda = texto.length > 0
+                        const claveRol = `${dia}-${rolId}`
+                        const expandido = tieneBusqueda || rolesExpandidos.has(claveRol)
+                        const votantes = new Set(votosPorDia[dia] ?? [])
+                        const todos = perfiles.filter(
+                          (p) =>
+                            p.is_activo &&
+                            (rolesPerfil[p.id] ?? []).includes(rolId) &&
+                            (!texto || p.nombre.toLowerCase().includes(texto)),
+                        )
+                        const asignadosLista = todos.filter((p) => asignadosSet.has(p.id))
+                        const noAsignadosLista = todos.filter((p) => !asignadosSet.has(p.id))
+
+                        function chipBadge(p: { id: string; nombre: string }, asignado: boolean) {
+                          const disponible = votantes.has(p.id)
+                          const cls = `badge-persona ${asignado ? 'badge-asignado' : ''} ${disponible ? 'badge-ok-soft' : 'badge-no-soft'}`
+                          return (
+                            <label key={p.id} className={cls}>
+                              <input
+                                type="checkbox"
+                                checked={asignado}
+                                onChange={() => toggleSlot(dia, rolId, p.id)}
+                              />
+                              <span className="badge-nombre">{p.nombre}</span>
+                              <span className={`badge-dot ${disponible ? 'dot-verde' : 'dot-rojo'}`} />
+                            </label>
+                          )
+                        }
+
                         return (
                           <div key={rolId} className="rol-grupo">
                             <span className="rol-nombre">
                               {ROL_EMOJI[rolId] ?? ''} {rol?.nombre ?? `Rol ${rolId}`}
                             </span>
-                            <div className="rol-miembros">
-                              {filasRol.map((f) => (
-                                <span key={f.id} className="chip">
-                                  {nombreDeId(perfiles, f.profile_id)}
-                                </span>
-                              ))}
-                            </div>
+                            {todos.length === 0 ? (
+                              <span className="muted">{texto ? 'Sin resultados' : 'Sin integrantes'}</span>
+                            ) : (
+                              <>
+                                <div className="checklist">
+                                  {asignadosLista.map((p) => chipBadge(p, true))}
+                                </div>
+                                {noAsignadosLista.length > 0 && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-sm ver-mas-btn"
+                                      onClick={() =>
+                                        setRolesExpandidos((prev) => {
+                                          const next = new Set(prev)
+                                          if (next.has(claveRol)) next.delete(claveRol)
+                                          else next.add(claveRol)
+                                          return next
+                                        })
+                                      }
+                                    >
+                                      {expandido && !tieneBusqueda
+                                        ? `Ocultar (${noAsignadosLista.length})`
+                                        : `+ Agregar (${noAsignadosLista.length})`}
+                                    </button>
+                                    {expandido && (
+                                      <div className="checklist">
+                                        {noAsignadosLista.map((p) => chipBadge(p, false))}
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            )}
                           </div>
                         )
                       })}
                     </div>
-                  )}
-                </>
-              )}
+                  </>
+                )}
 
-              {/* ── Modo edición ──────────────────────────── */}
-              {editing && (
-                <>
-                  <div className="filtro-dia">
-                    <input
-                      type="text"
-                      placeholder="Buscar integrante…"
-                      className="filtro-input"
-                      value={filtro[dia] ?? ''}
-                      onChange={(e) => setFiltro((prev) => ({ ...prev, [dia]: e.target.value }))}
-                    />
-                    {filtro[dia] && (
-                      <button
-                        type="button"
-                        className="filtro-clear"
-                        onClick={() => setFiltro((prev) => ({ ...prev, [dia]: '' }))}
-                      >
-                        ×
-                      </button>
+                {((noAsignados[dia] ?? []).length > 0) && (
+                  <p className="aviso">
+                    Sin cupo para esta fecha: {(noAsignados[dia] ?? []).map((id) => nombreDeId(perfiles, id)).join(', ')}
+                  </p>
+                )}
+                {totalPorDia(dia) > 0 && (
+                  <div className="repertorio-seccion">
+                    <label className="repertorio-label">Repertorio</label>
+                    {(!repDe(dia) || esAdmin) ? (
+                      <>
+                        <textarea
+                          className="repertorio-textarea"
+                          rows={3}
+                          placeholder="Escribe el repertorio del día..."
+                          disabled={!navigator.onLine}
+                          value={repEdit[dia] ?? repDe(dia)}
+                          onChange={(e) => setRepEdit((prev) => ({ ...prev, [dia]: e.target.value }))}
+                        />
+                        {(repEdit[dia] ?? '') !== repDe(dia) && navigator.onLine && (
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            disabled={repGuardando === dia}
+                            onClick={() => void guardarRep(dia)}
+                          >
+                            {repGuardando === dia ? 'Guardando…' : 'Guardar repertorio'}
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <p className="repertorio-texto">{repDe(dia)}</p>
                     )}
                   </div>
-                  <div className="rol-lista">
-                    {ORDEN_ROL.map((rolId) => {
-                      const rol = roles.find((r) => r.id === rolId)
-                      const asignados = edicion[dia]?.[rolId] ?? []
-                      const asignadosSet = new Set(asignados)
-                      const texto = (filtro[dia] ?? '').toLowerCase()
-                      const tieneBusqueda = texto.length > 0
-                      const claveRol = `${dia}-${rolId}`
-                      const expandido = tieneBusqueda || rolesExpandidos.has(claveRol)
-                      const votantes = new Set(votosPorDia[dia] ?? [])
-                      const todos = perfiles.filter(
-                        (p) =>
-                          p.is_activo &&
-                          (rolesPerfil[p.id] ?? []).includes(rolId) &&
-                          (!texto || p.nombre.toLowerCase().includes(texto)),
-                      )
-                      const asignadosLista = todos.filter((p) => asignadosSet.has(p.id))
-                      const noAsignadosLista = todos.filter((p) => !asignadosSet.has(p.id))
+                )}
+              </div>
+            ))
+          )}
 
-                      function chipBadge(p: { id: string; nombre: string }, asignado: boolean) {
-                        const disponible = votantes.has(p.id)
-                        const cls = `badge-persona ${asignado ? 'badge-asignado' : ''} ${disponible ? 'badge-ok-soft' : 'badge-no-soft'}`
-                        return (
-                          <label key={p.id} className={cls}>
-                            <input
-                              type="checkbox"
-                              checked={asignado}
-                              onChange={() => toggleSlot(dia, rolId, p.id)}
-                            />
-                            <span className="badge-nombre">{p.nombre}</span>
-                            <span className={`badge-dot ${disponible ? 'dot-verde' : 'dot-rojo'}`} />
-                          </label>
-                        )
-                      }
-
-                      return (
-                        <div key={rolId} className="rol-grupo">
-                          <span className="rol-nombre">
-                            {ROL_EMOJI[rolId] ?? ''} {rol?.nombre ?? `Rol ${rolId}`}
-                          </span>
-                          {todos.length === 0 ? (
-                            <span className="muted">
-                              {texto ? 'Sin resultados' : 'Sin integrantes'}
-                            </span>
-                          ) : (
-                            <>
-                              <div className="checklist">
-                                {asignadosLista.map((p) => chipBadge(p, true))}
-                              </div>
-                              {noAsignadosLista.length > 0 && (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-sm ver-mas-btn"
-                                    onClick={() =>
-                                      setRolesExpandidos((prev) => {
-                                        const next = new Set(prev)
-                                        if (next.has(claveRol)) next.delete(claveRol)
-                                        else next.add(claveRol)
-                                        return next
-                                      })
-                                    }
-                                  >
-                                    {expandido && !tieneBusqueda
-                                      ? `Ocultar (${noAsignadosLista.length})`
-                                      : `+ Agregar (${noAsignadosLista.length})`}
-                                  </button>
-                                  {expandido && (
-                                    <div className="checklist">
-                                      {noAsignadosLista.map((p) => chipBadge(p, false))}
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </>
-              )}
-
-              {((noAsignados[dia as DiaSemana] ?? []).length > 0) && (
-                <p className="aviso">
-                  Sin cupo para esta fecha:{' '}
-                  {(noAsignados[dia as DiaSemana] ?? []).map((id) => nombreDeId(perfiles, id)).join(', ')}
-                </p>
-              )}
-              {totalPorDia(dia) > 0 && (
-                <div className="repertorio-seccion">
-                  <label className="repertorio-label">Repertorio</label>
-                  {(!repDe(dia) || esAdmin) ? (
-                    <>
-                      <textarea
-                        className="repertorio-textarea"
-                        rows={3}
-                        placeholder="Escribe el repertorio del día..."
-                        disabled={!navigator.onLine}
-                        value={repEdit[dia] ?? repDe(dia)}
-                        onChange={(e) => setRepEdit((prev) => ({ ...prev, [dia]: e.target.value }))}
-                      />
-                      {(repEdit[dia] ?? '') !== repDe(dia) && navigator.onLine && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={repGuardando === dia}
-                          onClick={() => void guardarRep(dia)}
-                        >
-                          {repGuardando === dia ? 'Guardando…' : 'Guardar repertorio'}
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <p className="repertorio-texto">{repDe(dia)}</p>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* ── Agregar día extra ──────────────────────────── */}
           {editing && (
             <div className="card dia-card-estatico agregar-dia-card">
               <p className="agregar-dia-titulo">+ Agregar día especial</p>
+              <p className="muted" style={{ fontSize: '0.8rem', margin: 0 }}>
+                Elige un día <strong>dentro de la semana seleccionada</strong> ({toDateString(semana)} –{' '}
+                {toDateString(new Date(semana.getTime() + 6 * 86400000))}). Puedes repetir fecha para dos
+                programaciones el mismo día (ej: Domingo AM y Domingo PM).
+              </p>
               <input
                 type="text"
-                placeholder="Nombre del día (ej: Miércoles)"
+                placeholder="Nombre del día (ej: Miércoles, Domingo PM)"
                 className="filtro-input"
                 value={nuevoDiaNombre}
                 onChange={(e) => setNuevoDiaNombre(e.target.value)}
               />
-              <input
-                type="date"
-                className="filtro-input"
-                value={nuevoDiaFecha}
-                onChange={(e) => setNuevoDiaFecha(e.target.value)}
-                style={{ marginTop: '0.4rem' }}
-              />
+              {/* Calendario bonito limitado a la semana */}
+              <div className="calendario-mini" style={{ marginTop: '0.6rem' }}>
+                <div className="calendario-mini-header">
+                  {semana.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+                </div>
+                <div className="calendario-mini-grid">
+                  {Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date(semana)
+                    d.setHours(12, 0, 0, 0)
+                    d.setDate(d.getDate() + i)
+                    const fechaStr = toDateString(d)
+                    const seleccionado = nuevoDiaFecha === fechaStr
+                    const diaSem = d.toLocaleDateString('es-ES', { weekday: 'short' })
+                    const yaUsado = diasEdit.some((de) => de.fecha === fechaStr)
+                    return (
+                      <button
+                        key={fechaStr}
+                        type="button"
+                        className={`cal-dia ${seleccionado ? 'cal-dia-seleccionado' : ''} ${yaUsado ? 'cal-dia-usado' : ''}`}
+                        onClick={() => setNuevoDiaFecha(fechaStr)}
+                        title={`${diaSem} ${fechaStr}${yaUsado ? ' (ya hay programación ese día)' : ''}`}
+                      >
+                        <span className="cal-dia-sem">{diaSem}</span>
+                        <span className="cal-dia-num">{d.getDate()}</span>
+                        {yaUsado && <span className="cal-dia-punto" />}
+                      </button>
+                    )
+                  })}
+                </div>
+                {nuevoDiaFecha && (
+                  <p className="cal-seleccionado">
+                    Seleccionado: <strong>{new Date(nuevoDiaFecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</strong>{' '}
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNuevoDiaFecha('')}>
+                      Quitar
+                    </button>
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
                 onClick={agregarDiaExtra}
                 disabled={!nuevoDiaNombre.trim() || !nuevoDiaFecha}
-                style={{ marginTop: '0.4rem' }}
+                style={{ marginTop: '0.6rem' }}
               >
                 Agregar día
               </button>
@@ -652,17 +857,11 @@ export default function Programacion() {
         <section className="card">
           <div className="encabezado-fila">
             <h3>Contador por rol</h3>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setVerContadores((v) => !v)}
-            >
+            <button type="button" className="btn btn-ghost" onClick={() => setVerContadores((v) => !v)}>
               {verContadores ? 'Ocultar' : 'Ver contador por rol'}
             </button>
           </div>
-          <p className="subtitulo">
-            Historial de asignaciones, para que el reparto entre los integrantes sea justo.
-          </p>
+          <p className="subtitulo">Historial de asignaciones, para que el reparto entre los integrantes sea justo.</p>
           {verContadores && (
             <>
               <div className="tabla-scroll">
@@ -686,11 +885,7 @@ export default function Programacion() {
                 </table>
               </div>
               {filasConteo.length > limiteContadores && (
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => setLimiteContadores((l) => l + 15)}
-                >
+                <button type="button" className="btn btn-ghost" onClick={() => setLimiteContadores((l) => l + 15)}>
                   Ver más ({filasConteo.length - limiteContadores} restantes)
                 </button>
               )}

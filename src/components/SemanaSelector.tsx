@@ -7,6 +7,7 @@ interface Props {
 
 export default function SemanaSelector({ semana, onChange }: Props) {
   const actual = inicioSemana()
+  const siguiente = sumarSemanas(actual, 1)
 
   return (
     <div className="semana-nav">
@@ -21,6 +22,7 @@ export default function SemanaSelector({ semana, onChange }: Props) {
       <div className="semana-titulo">
         <strong>{formatSemana(semana)}</strong>
         {semana.getTime() === actual.getTime() && <span className="chip chip-info">Semana actual</span>}
+        {semana.getTime() === siguiente.getTime() && <span className="chip chip-info">Siguiente semana</span>}
       </div>
       <button
         type="button"

@@ -24,9 +24,20 @@ export async function obtenerRolesDePerfil(profileId: string): Promise<number[]>
   return (data ?? []).map((r) => (r as { rol_id: number }).rol_id)
 }
 
+export async function obtenerMapaRoles(): Promise<Record<string, number[]>> {
+  const { data, error } = await supabase.from('profile_roles').select('profile_id, rol_id')
+  if (error) throw new Error(error.message)
+  const mapa: Record<string, number[]> = {}
+  for (const row of (data ?? []) as { profile_id: string; rol_id: number }[]) {
+    mapa[row.profile_id] ??= []
+    mapa[row.profile_id].push(row.rol_id)
+  }
+  return mapa
+}
+
 export async function obtenerVotosSemana(
   semanaInicio: string,
-): Promise<{ porDia: Record<DiaSemana, string[]>; propios: Set<DiaSemana> }> {
+): Promise<{ porDia: Record<string, string[]>; propios: Set<string> }> {
   const { data: sesion } = await supabase.auth.getSession()
   const miId = sesion.session?.user.id
 
@@ -37,18 +48,20 @@ export async function obtenerVotosSemana(
 
   if (error) throw new Error(error.message)
 
-  const porDia: Record<DiaSemana, string[]> = { Martes: [], Jueves: [], Sabado: [], Domingo: [] }
-  const propios = new Set<DiaSemana>()
+  const porDia: Record<string, string[]> = {}
+  const propios = new Set<string>()
+  // Inicializar con los 4 clásicos para compatibilidad, pero también aceptar dinámicos
+  for (const d of DIAS_SEMANA) porDia[d] = []
   for (const voto of (data ?? []) as Pick<Voto, 'profile_id' | 'dia_semana'>[]) {
-    const dia = voto.dia_semana as DiaSemana
-    if (!(dia in porDia)) continue
+    const dia = voto.dia_semana as string
+    if (!(dia in porDia)) porDia[dia] = []
     porDia[dia].push(voto.profile_id)
     if (voto.profile_id === miId) propios.add(dia)
   }
   return { porDia, propios }
 }
 
-export async function votarDia(semanaInicio: string, dia: DiaSemana, activo: boolean) {
+export async function votarDia(semanaInicio: string, dia: string, activo: boolean) {
   const { data: sesion } = await supabase.auth.getSession()
   const miId = sesion.session?.user.id
   if (!miId) throw new Error('No hay sesión')
@@ -98,16 +111,62 @@ export async function obtenerConteosHistoricos(semanaInicio: string) {
   return conteos
 }
 
+export interface DiaConfig {
+  semana_inicio: string
+  dia_semana: string
+  fecha: string
+}
+
+export async function obtenerDiasConfig(semanaInicio: string): Promise<DiaConfig[]> {
+  try {
+    const { data, error } = await supabase
+      .from('dias_config')
+      .select('*')
+      .eq('semana_inicio', semanaInicio)
+      .order('fecha', { ascending: true })
+    if (error) throw error
+    return (data ?? []) as DiaConfig[]
+  } catch {
+    // Si la tabla aún no existe (migración no aplicada), fallback vacío
+    return []
+  }
+}
+
+export async function guardarDiasConfig(semanaInicio: string, dias: { dia_semana: string; fecha: string }[]) {
+  try {
+    const { error: errDel } = await supabase.from('dias_config').delete().eq('semana_inicio', semanaInicio)
+    if (errDel) throw errDel
+    if (dias.length > 0) {
+      const rows = dias.map((d) => ({
+        semana_inicio: semanaInicio,
+        dia_semana: d.dia_semana,
+        fecha: d.fecha,
+      }))
+      const { error } = await supabase.from('dias_config').insert(rows)
+      if (error) throw error
+    }
+  } catch (e) {
+    const msg = (e as { message?: string })?.message ?? String(e)
+    // Si la tabla aún no existe (migración no aplicada), no bloquear el guardado:
+    // el fallback por filas mantendrá los días visibles.
+    if (/does not exist|not exist|relation.*dias_config|Could not find the table/i.test(msg)) {
+      console.warn('dias_config no existe aún, se usa fallback por filas:', msg)
+      return
+    }
+    throw e instanceof Error ? e : new Error(msg)
+  }
+}
+
 export interface GenerarSemanaResultado {
   semana: string
   asignaciones: {
     semana_inicio: string
     fecha: string
-    dia_semana: DiaSemana
+    dia_semana: string
     rol_id: number
     profile_id: string
   }[]
-  noAsignados: Record<DiaSemana, string[]>
+  noAsignados: Record<string, string[]>
 }
 
 /**
@@ -119,10 +178,12 @@ export async function generarProgramacionSemana(
 ): Promise<GenerarSemanaResultado> {
   const semanaStr = toDateString(semanaInicio)
 
-  const [perfiles, votos, conteos] = await Promise.all([
+  const [perfiles, votos, conteos, diasConfig, progExistente] = await Promise.all([
     obtenerPerfiles(),
     obtenerVotosSemana(semanaStr),
     obtenerConteosHistoricos(semanaStr),
+    obtenerDiasConfig(semanaStr),
+    obtenerProgramacionSemana(semanaStr).catch(() => [] as ProgramacionRow[]),
   ])
 
   const rolesPorPerfil: Record<string, number[]> = {}
@@ -130,16 +191,35 @@ export async function generarProgramacionSemana(
     rolesPorPerfil[perfil.id] = await obtenerRolesDePerfil(perfil.id)
   }
 
+  // Determinar lista de días activos: si hay config, usarla; si no, derivar de programación existente o defaults
+  let diasActivos: string[]
+  const mapaFecha: Record<string, string> = {}
+  if (diasConfig.length > 0) {
+    diasActivos = diasConfig.map((d) => d.dia_semana)
+    for (const d of diasConfig) mapaFecha[d.dia_semana] = d.fecha
+  } else if (progExistente.length > 0) {
+    const mapa = new Map<string, string>()
+    for (const f of progExistente) if (!mapa.has(f.dia_semana)) mapa.set(f.dia_semana, f.fecha)
+    const lista = Array.from(mapa.entries())
+    lista.sort((a, b) => a[1].localeCompare(b[1]))
+    diasActivos = lista.map(([n]) => n)
+    for (const [n, f] of lista) mapaFecha[n] = f
+  } else {
+    diasActivos = [...DIAS_SEMANA]
+    for (const d of DIAS_SEMANA) mapaFecha[d] = toDateString(fechaDeDia(semanaInicio, d as DiaSemana))
+  }
+
   const resultado = calcularProgramacion({
     votosPorDia: votos.porDia,
     rolesPorPerfil,
     conteos,
+    dias: diasActivos,
   })
 
   const asignaciones: GenerarSemanaResultado['asignaciones'] = []
-  for (const dia of DIAS_SEMANA) {
-    const fecha = toDateString(fechaDeDia(semanaInicio, dia))
-    for (const a of resultado.dias[dia]) {
+  for (const dia of diasActivos) {
+    const fecha = mapaFecha[dia] ?? toDateString(semanaInicio)
+    for (const a of resultado.dias[dia] ?? []) {
       asignaciones.push({
         semana_inicio: semanaStr,
         fecha,
