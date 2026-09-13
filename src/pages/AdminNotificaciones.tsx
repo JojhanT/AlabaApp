@@ -141,8 +141,8 @@ export default function AdminNotificaciones() {
 
   return (
     <div className="pagina">
-      <h2>Notificaciones personalizadas</h2>
-      <p className="subtitulo">Envía un push a todos, por rol, por día programado o a personas específicas. Solo lo verán los destinatarios.</p>
+      <h2>Notificaciones</h2>
+      <p className="subtitulo">Envía notificaciones.</p>
 
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
         <label className="campo">
@@ -160,11 +160,8 @@ export default function AdminNotificaciones() {
           />
         </label>
         <button type="button" className="btn btn-ghost btn-sm" onClick={usarDemoVotacion} style={{ alignSelf: 'flex-start' }}>
-          Usar mensaje demo para incitar a votar
+          Usar demo
         </button>
-        <div className="aviso" style={{ fontSize: '0.85rem' }}>
-          <strong>Demo votar:</strong> {MENSAJE_VOTACION_DEMO}
-        </div>
 
         <div>
           <p className="roles-titulo" style={{ marginBottom: 6, fontWeight: 600 }}>Destinatarios</p>
@@ -250,14 +247,12 @@ export default function AdminNotificaciones() {
       </div>
 
       <div className="card">
-        <h3>Mensajes demo para incitar a votar</h3>
-        <p className="muted" style={{ fontSize: '0.9rem' }}>Copia y usa como plantilla:</p>
+        <h3>Mensaje demo</h3>
         <div style={{ background: 'var(--fondo)', border: '1px solid var(--borde)', borderRadius: 8, padding: 10, marginTop: 6, whiteSpace: 'pre-wrap', fontSize: '0.9rem' }}>
           <strong>¡Tu voto hace la diferencia! 🗳️</strong>
           {'\n'}
           {MENSAJE_VOTACION_DEMO}
         </div>
-        <p className="muted" style={{ fontSize: '0.8rem', marginTop: 6 }}>Tip: Envía viernes 20:00 a quienes aún no votaron (el sistema ya lo hace automático), o úsalo manual cualquier día.</p>
       </div>
     </div>
   )

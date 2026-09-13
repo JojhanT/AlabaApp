@@ -502,7 +502,7 @@ function UsuarioFila({
                   <input type="text" value={edicion.celular} onChange={(e) => onChangeCampo('celular', e.target.value)} disabled={guardando} />
                 </label>
               </div>
-              <strong className="roles-titulo">Roles (se guardan al presionar Modificar)</strong>
+              <strong className="roles-titulo">Roles</strong>
               {roles.length === 0 ? (
                 <p className="aviso">{rolesError ? 'No se pudieron cargar los roles. Verifica tu conexión.' : 'No se encontraron roles. Intenta recargar la página.'}</p>
               ) : (
@@ -528,7 +528,7 @@ function UsuarioFila({
                   {guardando ? 'Guardando…' : 'Guardar cambios'}
                 </button>
               </div>
-              <p className="muted" style={{ fontSize: '0.8rem' }}>Los cambios de roles y estado solo se envían al presionar “Guardar cambios”.</p>
+
             </div>
           </td>
         </tr>

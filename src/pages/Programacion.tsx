@@ -41,7 +41,7 @@ interface DiaExtra {
 }
 
 export default function Programacion() {
-  const { esAdmin } = useAuth()
+  const { esAdmin, perfil } = useAuth()
   const { semana, cambiarSemana } = useSemana()
   const [filas, setFilas] = useState<ProgramacionRow[]>([])
   const [perfiles, setPerfiles] = useState<Perfil[]>([])
@@ -268,7 +268,7 @@ export default function Programacion() {
     setFiltro((prev) => ({ ...prev, [nombre]: '' }))
     setNuevoDiaNombre('')
     setNuevoDiaFecha('')
-    setMensaje(`Día "${nombre}" agregado. No olvides asignar integrantes y guardar.`)
+    setMensaje(`Día "${nombre}" agregado.`)
   }
 
   function quitarDia(nombre: string) {
@@ -283,7 +283,7 @@ export default function Programacion() {
       delete next[nombre]
       return next
     })
-    setMensaje(`Día "${nombre}" quitado. Recuerda guardar para aplicar cambios.`)
+    setMensaje(`Día "${nombre}" quitado.`)
     setError('')
   }
 
@@ -536,6 +536,26 @@ export default function Programacion() {
         delete next[dia]
         return next
       })
+      // Notificar a los programados de ese día (solo si hay texto)
+      if (texto && perfil && navigator.onLine) {
+        try {
+          const destIds = [...new Set(filas.filter((f) => f.dia_semana === dia).map((f) => f.profile_id))]
+          if (destIds.length > 0) {
+            const titulo = `Nuevo repertorio para ${dia}`
+            const cuerpo = texto.length > 120 ? texto.slice(0, 120) + '…' : texto
+            const fechaTxt = fechaParaDia(dia)
+            await supabase.from('notificaciones').insert({
+              titulo,
+              cuerpo: `${cuerpo} — ${fechaTxt}`,
+              creado_por: perfil.id,
+              destinatarios: destIds,
+              filtros: { dia, semana: semanaStr, tipo: 'repertorio' },
+            })
+          }
+        } catch {
+          /* no bloquear guardado si falla la notificación */
+        }
+      }
     } catch {
       setError('No se pudo guardar el repertorio. Intenta de nuevo.')
       invalidarCacheProgramacion(semanaStr)
@@ -570,9 +590,7 @@ export default function Programacion() {
         )}
       </div>
       <p className="subtitulo">
-        {editing
-          ? 'Quita días que no necesites, agrega días especiales (puedes repetir fecha para varias programaciones el mismo día) y asigna integrantes.'
-          : 'Cada semana se genera en automático, procurando un reparto justo según la disponibilidad de cada integrante.'}
+        {editing ? 'Edita días y asigna integrantes.' : 'Programación semanal.'}
       </p>
 
       <SemanaSelector semana={semana} onChange={cambiarSemana} />
@@ -776,12 +794,8 @@ export default function Programacion() {
 
           {editing && (
             <div className="card dia-card-estatico agregar-dia-card">
-              <p className="agregar-dia-titulo">+ Agregar día especial</p>
-              <p className="muted" style={{ fontSize: '0.8rem', margin: 0 }}>
-                Elige un día <strong>dentro de la semana seleccionada</strong> ({toDateString(semana)} –{' '}
-                {toDateString(new Date(semana.getTime() + 6 * 86400000))}). Puedes repetir fecha para dos
-                programaciones el mismo día (ej: Domingo AM y Domingo PM).
-              </p>
+              <p className="agregar-dia-titulo">+ Agregar día</p>
+              <p className="muted" style={{ fontSize: '0.8rem', margin: 0 }}>Elige fecha de la semana.</p>
               <input
                 type="text"
                 placeholder="Nombre del día (ej: Miércoles, Domingo PM)"

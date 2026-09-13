@@ -108,7 +108,7 @@ export default function Layout() {
       {!online && (
         <div className="offline-banner" role="status" aria-live="polite">
           <span className="offline-dot" />
-          Sin internet — mostrando <strong>programación local</strong> (puede estar desactualizada). Tus cambios se guardarán al reconectar.
+          Sin internet — modo local
         </div>
       )}
       {mostrarModal && (
@@ -117,30 +117,25 @@ export default function Layout() {
             {!pasoNo ? (
               <>
                 <div className="modal-notif-icon">🔔</div>
-                <h3 className="modal-notif-titulo">¡Actívalas en 2 toques!</h3>
-                <p className="modal-notif-text">
-                  <strong>Es obligatorio para no perderte nada.</strong> Recibirás tu programación y el recordatorio del viernes si no votaste.
-                </p>
+                <h3 className="modal-notif-titulo">Notificaciones</h3>
+                <p className="modal-notif-text">Activa para recibir tu programación.</p>
                 <button type="button" className="btn btn-primary btn-block modal-notif-cta" onClick={() => void activarNotis()}>
-                  Sí, activar notificaciones
+                  Activar
                 </button>
                 <button type="button" className="modal-notif-no" onClick={() => setPasoNo(true)}>
-                  No, prefiero perderme mi programación
+                  Ahora no
                 </button>
-                <p className="modal-notif-legal">Solo 2 toques. Puedes desactivar cuando quieras.</p>
               </>
             ) : (
               <>
-                <div className="modal-notif-icon">⚠️</div>
+                <div className="modal-notif-icon">🔔</div>
                 <h3 className="modal-notif-titulo">¿Seguro?</h3>
-                <p className="modal-notif-text">
-                  Sin notificaciones <strong>no te avisaremos</strong> si sales programado o si olvidas votar el viernes.
-                </p>
+                <p className="modal-notif-text">Te perderás tu programación.</p>
                 <button type="button" className="btn btn-primary btn-block modal-notif-cta" onClick={() => void activarNotis()}>
-                  Sí, activar ahora
+                  Activar
                 </button>
                 <button type="button" className="modal-notif-no" onClick={dismissModalTemporal}>
-                  Sí, me lo pierdo
+                  Continuar sin activar
                 </button>
               </>
             )}
