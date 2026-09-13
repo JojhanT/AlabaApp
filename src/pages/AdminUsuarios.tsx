@@ -46,7 +46,8 @@ export default function AdminUsuarios() {
   })
 
   const [edicion, setEdicion] = useState<Record<string, EdicionPendiente>>({})
-  // Roles CRUD
+  // Roles CRUD (compacto, colapsable)
+  const [showRoles, setShowRoles] = useState(false)
   const [nuevoRol, setNuevoRol] = useState('')
   const [editRolId, setEditRolId] = useState<number | null>(null)
   const [editRolNombre, setEditRolNombre] = useState('')
@@ -348,38 +349,48 @@ export default function AdminUsuarios() {
         </form>
       </section>
 
-      <section className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <h3>Roles</h3>
-          <span className="muted" style={{ fontSize: '0.8rem' }}>{roles.length} roles</span>
+      <section className="card" style={{ padding: '0.9rem 1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Roles <span className="muted" style={{ fontWeight: 400, fontSize: '0.8rem' }}>({roles.length})</span></h3>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowRoles((v) => !v)}>{showRoles ? 'Ocultar' : 'Gestionar'}</button>
         </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-          <input className="filtro-input" style={{ flex: 1, minWidth: 160 }} placeholder="Nuevo rol (ej: Voz líder)" value={nuevoRol} onChange={(e) => setNuevoRol(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), void handleCrearRol())} />
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleCrearRol()} disabled={rolAccion === 'crear' || !nuevoRol.trim()}>
-            {rolAccion === 'crear' ? 'Creando…' : 'Agregar rol'}
-          </button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-          {roles.map((r) => (
-            <div key={r.id} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid var(--borde)', borderRadius: 8, padding: '6px 8px' }}>
-              {editRolId === r.id ? (
-                <>
-                  <input className="filtro-input" style={{ flex: 1 }} value={editRolNombre} onChange={(e) => setEditRolNombre(e.target.value)} autoFocus />
-                  <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleActualizarRol()} disabled={rolAccion === String(r.id)}>Guardar</button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditRolId(null); setEditRolNombre('') }}>Cancelar</button>
-                </>
-              ) : (
-                <>
-                  <span style={{ flex: 1, fontWeight: 600 }}>{r.nombre}</span>
-                  <span className="muted" style={{ fontSize: '0.75rem' }}>#{r.id}</span>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditRolId(r.id); setEditRolNombre(r.nombre) }}>Editar</button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => void handleEliminarRol(r.id)} disabled={rolAccion === String(r.id)} style={{ color: 'var(--alerta)' }}>Eliminar</button>
-                </>
-              )}
+        {!showRoles ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {roles.map((r) => (
+              <span key={r.id} className="chip" style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}>{r.nombre}</span>
+            ))}
+            {roles.length === 0 && <span className="muted" style={{ fontSize: '0.85rem' }}>Sin roles</span>}
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+              <input className="filtro-input" style={{ flex: 1, minWidth: 140, padding: '0.3rem 0.5rem', fontSize: '0.85rem' }} placeholder="Nuevo rol" value={nuevoRol} onChange={(e) => setNuevoRol(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), void handleCrearRol())} />
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleCrearRol()} disabled={rolAccion === 'crear' || !nuevoRol.trim()}>
+                {rolAccion === 'crear' ? '…' : '+ Agregar'}
+              </button>
             </div>
-          ))}
-          {roles.length === 0 && <p className="muted">Sin roles. Crea el primero.</p>}
-        </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+              {roles.map((r) => (
+                <span key={r.id} className="chip" style={{ display: 'inline-flex', gap: 4, alignItems: 'center', padding: '0.15rem 0.4rem', fontSize: '0.8rem' }}>
+                  {editRolId === r.id ? (
+                    <>
+                      <input className="filtro-input" style={{ width: 90, padding: '0.15rem 0.3rem', fontSize: '0.8rem' }} value={editRolNombre} onChange={(e) => setEditRolNombre(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && void handleActualizarRol()} />
+                      <button type="button" className="btn btn-primary" style={{ padding: '0.1rem 0.3rem', fontSize: '0.7rem' }} onClick={() => void handleActualizarRol()} disabled={rolAccion === String(r.id)}>✓</button>
+                      <button type="button" className="btn btn-ghost" style={{ padding: '0.1rem 0.3rem', fontSize: '0.7rem' }} onClick={() => { setEditRolId(null); setEditRolNombre('') }}>✕</button>
+                    </>
+                  ) : (
+                    <>
+                      {r.nombre}
+                      <button type="button" onClick={() => { setEditRolId(r.id); setEditRolNombre(r.nombre) }} title="Editar" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.75rem', lineHeight: 1 }}>✏️</button>
+                      <button type="button" onClick={() => void handleEliminarRol(r.id)} disabled={rolAccion === String(r.id)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.75rem', lineHeight: 1, opacity: 0.7 }}>🗑️</button>
+                    </>
+                  )}
+                </span>
+              ))}
+            </div>
+            {roles.length === 0 && <p className="muted" style={{ marginTop: 6, fontSize: '0.85rem' }}>Sin roles. Crea el primero.</p>}
+          </>
+        )}
       </section>
 
       <section className="card">
