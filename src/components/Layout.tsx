@@ -25,42 +25,57 @@ export default function Layout() {
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [saliendo, setSaliendo] = useState(false)
   const [permiso, setPermiso] = useState(() => (typeof Notification !== 'undefined' ? Notification.permission : 'default'))
-  const [bannerNotifDismiss, setBannerNotifDismiss] = useState(() => {
-    try {
-      return localStorage.getItem('notif_banner_dismissed') === '1'
-    } catch {
-      return false
-    }
-  })
+  const [mostrarModal, setMostrarModal] = useState(false)
+  const [pasoNo, setPasoNo] = useState(false)
   const online = useOnline()
+
+  // Modal anti-no: obliga en pocas palabras a decir que sí
+  useEffect(() => {
+    if (!perfil) return
+    if (typeof Notification === 'undefined') return
+    if (Notification.permission !== 'default') return
+    // No mostrar si ya se mostró hace poco (anti-spam pero insiste cada 24h)
+    try {
+      const ultimo = localStorage.getItem('notif_modal_dismissed_at')
+      if (ultimo && Date.now() - Number(ultimo) < 24 * 60 * 60 * 1000) return
+    } catch {
+      /* ignorar */
+    }
+    const t = window.setTimeout(() => setMostrarModal(true), 1200)
+    return () => window.clearTimeout(t)
+  }, [perfil, permiso])
 
   async function activarNotis() {
     const ok = await pedirPermisoNotificaciones()
     setPermiso(Notification.permission)
     if (ok) {
+      setMostrarModal(false)
       try {
         if ('Notification' in window && Notification.permission === 'granted') {
-          // Intentar mostrar una de prueba vía SW o directa
           if ('serviceWorker' in navigator) {
             const reg = await navigator.serviceWorker.ready
-            await (reg as unknown as { showNotification: (t: string, o: unknown) => Promise<void> }).showNotification('Notificaciones activadas', {
-              body: 'Recibirás avisos de programación y recordatorios de votación.',
+            await (reg as unknown as { showNotification: (t: string, o: unknown) => Promise<void> }).showNotification('Notificaciones activadas ✓', {
+              body: 'Recibirás tu programación y el recordatorio del viernes.',
               icon: '/favicon-192.png',
             } as unknown as NotificationOptions)
           } else {
-            new Notification('Notificaciones activadas', { body: 'Recibirás avisos de programación y recordatorios.' })
+            new Notification('Notificaciones activadas ✓', { body: 'Recibirás tu programación y el recordatorio del viernes.' })
           }
         }
       } catch {
         /* ignorar */
       }
+    } else {
+      // Si el navegador bloqueó o dijo no, mantener modal con instrucciones
+      setPermiso(Notification.permission)
     }
   }
 
-  function dismissBanner() {
-    setBannerNotifDismiss(true)
+  function dismissModalTemporal() {
+    setPasoNo(false)
+    setMostrarModal(false)
     try {
-      localStorage.setItem('notif_banner_dismissed', '1')
+      localStorage.setItem('notif_modal_dismissed_at', String(Date.now()))
     } catch {
       /* ignorar */
     }
@@ -96,16 +111,39 @@ export default function Layout() {
           Sin internet — mostrando <strong>programación local</strong> (puede estar desactualizada). Tus cambios se guardarán al reconectar.
         </div>
       )}
-      {typeof Notification !== 'undefined' && permiso === 'default' && !bannerNotifDismiss && (
-        <div className="notif-banner" role="status" aria-live="polite">
-          <span className="notif-banner-text">🔔 Activa las notificaciones para recibir tu programación y el recordatorio del viernes si aún no votaste</span>
-          <div className="notif-banner-acciones">
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => void activarNotis()}>
-              Activar
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={dismissBanner}>
-              Ahora no
-            </button>
+      {mostrarModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Activar notificaciones" onClick={dismissModalTemporal}>
+          <div className="modal-notif" onClick={(e) => e.stopPropagation()}>
+            {!pasoNo ? (
+              <>
+                <div className="modal-notif-icon">🔔</div>
+                <h3 className="modal-notif-titulo">¡Actívalas en 2 toques!</h3>
+                <p className="modal-notif-text">
+                  <strong>Es obligatorio para no perderte nada.</strong> Recibirás tu programación y el recordatorio del viernes si no votaste.
+                </p>
+                <button type="button" className="btn btn-primary btn-block modal-notif-cta" onClick={() => void activarNotis()}>
+                  Sí, activar notificaciones
+                </button>
+                <button type="button" className="modal-notif-no" onClick={() => setPasoNo(true)}>
+                  No, prefiero perderme mi programación
+                </button>
+                <p className="modal-notif-legal">Solo 2 toques. Puedes desactivar cuando quieras.</p>
+              </>
+            ) : (
+              <>
+                <div className="modal-notif-icon">⚠️</div>
+                <h3 className="modal-notif-titulo">¿Seguro?</h3>
+                <p className="modal-notif-text">
+                  Sin notificaciones <strong>no te avisaremos</strong> si sales programado o si olvidas votar el viernes.
+                </p>
+                <button type="button" className="btn btn-primary btn-block modal-notif-cta" onClick={() => void activarNotis()}>
+                  Sí, activar ahora
+                </button>
+                <button type="button" className="modal-notif-no" onClick={dismissModalTemporal}>
+                  Sí, me lo pierdo
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
