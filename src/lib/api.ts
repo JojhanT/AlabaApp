@@ -9,6 +9,32 @@ export async function obtenerRoles(): Promise<Rol[]> {
   return (data ?? []) as Rol[]
 }
 
+export async function crearRol(nombre: string): Promise<Rol> {
+  const limpio = nombre.trim()
+  if (!limpio) throw new Error('El nombre del rol es obligatorio')
+  // Obtener siguiente id (roles usa smallint manual)
+  const { data: existentes } = await supabase.from('roles').select('id').order('id', { ascending: false }).limit(1)
+  const siguienteId = existentes && existentes.length > 0 ? (existentes[0] as { id: number }).id + 1 : 1
+  // Evitar colisión con ids reservados 1 (Cantante legacy)
+  const idFinal = siguienteId === 1 ? 2 : siguienteId
+  const { data, error } = await supabase.from('roles').insert({ id: idFinal, nombre: limpio }).select().single()
+  if (error) throw new Error(error.message)
+  return data as Rol
+}
+
+export async function actualizarRol(id: number, nombre: string): Promise<Rol> {
+  const limpio = nombre.trim()
+  if (!limpio) throw new Error('El nombre del rol es obligatorio')
+  const { data, error } = await supabase.from('roles').update({ nombre: limpio }).eq('id', id).select().single()
+  if (error) throw new Error(error.message)
+  return data as Rol
+}
+
+export async function eliminarRol(id: number): Promise<void> {
+  const { error } = await supabase.from('roles').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
 export async function obtenerPerfiles(): Promise<Perfil[]> {
   const { data, error } = await supabase.from('profiles').select('*').order('nombre')
   if (error) throw new Error(error.message)

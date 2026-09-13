@@ -1,11 +1,28 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
-import { crearUsuario, obtenerPerfiles, obtenerRoles, obtenerRolesDePerfil } from '../lib/api'
+import {
+  crearUsuario,
+  obtenerPerfiles,
+  obtenerRoles,
+  obtenerMapaRoles,
+  crearRol,
+  actualizarRol,
+  eliminarRol,
+} from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import Paginacion from '../components/Paginacion'
+import { leerCacheUsuarios, guardarCacheUsuarios, invalidarCacheUsuarios, leerCacheGlobal, guardarCacheGlobal, invalidarCacheGlobal } from '../lib/cache'
 import type { Perfil, Rol } from '../types'
 
 const POR_PAGINA = 8
+
+type EdicionPendiente = {
+  nombre: string
+  celular: string
+  roles: Set<number>
+  is_admin: boolean
+  is_activo: boolean
+}
 
 export default function AdminUsuarios() {
   const { perfil: yo } = useAuth()
@@ -28,33 +45,81 @@ export default function AdminUsuarios() {
     roles: new Set<number>(),
   })
 
-  const [edicion, setEdicion] = useState<Record<string, { nombre: string; celular: string }>>(
-    {},
-  )
+  const [edicion, setEdicion] = useState<Record<string, EdicionPendiente>>({})
+  // Roles CRUD
+  const [nuevoRol, setNuevoRol] = useState('')
+  const [editRolId, setEditRolId] = useState<number | null>(null)
+  const [editRolNombre, setEditRolNombre] = useState('')
+  const [rolAccion, setRolAccion] = useState<string | null>(null)
 
-  async function cargar() {
+  async function cargar(opts: { force?: boolean } = {}) {
     setError('')
     setMensaje('')
     setRolesError('')
-    try {
-      const ps = await obtenerPerfiles()
-      ps.sort(
-        (a, b) => Number(a.is_activo) - Number(b.is_activo) || a.nombre.localeCompare(b.nombre),
-      )
-      setPerfiles(ps)
-      const mapa: Record<string, number[]> = {}
-      for (const p of ps) mapa[p.id] = await obtenerRolesDePerfil(p.id)
-      setRolesPerfil(mapa)
-    } catch {
-      setError('No se pudieron cargar los usuarios. Verifica tu conexión.')
+    const cached = !opts.force ? leerCacheUsuarios() : null
+    if (cached && !opts.force) {
+      setPerfiles(cached.perfiles)
+      setRoles(cached.roles)
+      setRolesPerfil(cached.rolesPerfil)
+      setCargando(false)
+      if (navigator.onLine) {
+        // revalidar en background aunque fresca
+      } else {
+        return
+      }
+    } else {
+      setCargando(true)
+      if (!navigator.onLine) {
+        if (cached) {
+          setPerfiles(cached.perfiles)
+          setRoles(cached.roles)
+          setRolesPerfil(cached.rolesPerfil)
+          setCargando(false)
+          return
+        }
+        setError('Sin conexión y sin cache de usuarios.')
+        setCargando(false)
+        return
+      }
     }
+
     try {
-      const rs = await obtenerRoles()
+      // Intentar reusar global para roles si existe
+      const global = leerCacheGlobal()
+      let ps: Perfil[]
+      let rs: Rol[]
+      let mapa: Record<string, number[]>
+      if (global && !opts.force) {
+        ps = global.perfiles
+        // obtener roles y mapa en paralelo
+        const [r, m] = await Promise.all([obtenerRoles(), obtenerMapaRoles()])
+        rs = r
+        mapa = m
+      } else {
+        const [p, r, m] = await Promise.all([obtenerPerfiles(), obtenerRoles(), obtenerMapaRoles()])
+        ps = p
+        rs = r
+        mapa = m
+        // Actualizar global para otros módulos
+        guardarCacheGlobal(ps, rs)
+      }
+      ps.sort((a, b) => Number(a.is_activo) - Number(b.is_activo) || a.nombre.localeCompare(b.nombre))
+      setPerfiles(ps)
       setRoles(rs)
+      setRolesPerfil(mapa)
+      guardarCacheUsuarios({ perfiles: ps, roles: rs, rolesPerfil: mapa })
     } catch {
-      setRolesError('No se pudieron cargar los roles.')
+      if (!cached) setError('No se pudieron cargar los usuarios. Verifica tu conexión.')
     } finally {
       setCargando(false)
+    }
+    try {
+      if (!cached) {
+        const rs = await obtenerRoles()
+        setRoles(rs)
+      }
+    } catch {
+      setRolesError('No se pudieron cargar los roles.')
     }
   }
 
@@ -94,7 +159,9 @@ export default function AdminUsuarios() {
       })
       setMensaje(`Usuario ${form.nombre} creado correctamente.`)
       setForm({ codigo: '', nombre: '', celular: '', roles: new Set() })
-      await cargar()
+      invalidarCacheUsuarios()
+      invalidarCacheGlobal()
+      await cargar({ force: true })
     } catch {
       setError('No se pudo crear el usuario. Verifica que el código no esté en uso.')
     } finally {
@@ -102,94 +169,137 @@ export default function AdminUsuarios() {
     }
   }
 
-  async function actualizarRoles(perfilId: string, rolId: number, activo: boolean) {
+  // ── Roles CRUD ──────────────────────────────────────────────
+  async function handleCrearRol() {
+    if (!nuevoRol.trim()) return
+    setRolAccion('crear')
     setError('')
+    try {
+      await crearRol(nuevoRol.trim())
+      setNuevoRol('')
+      setMensaje('Rol creado.')
+      invalidarCacheUsuarios()
+      invalidarCacheGlobal()
+      await cargar({ force: true })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setRolAccion(null)
+    }
+  }
+  async function handleActualizarRol() {
+    if (editRolId === null || !editRolNombre.trim()) return
+    setRolAccion(String(editRolId))
+    try {
+      await actualizarRol(editRolId, editRolNombre.trim())
+      setEditRolId(null)
+      setEditRolNombre('')
+      setMensaje('Rol actualizado.')
+      invalidarCacheUsuarios()
+      invalidarCacheGlobal()
+      await cargar({ force: true })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setRolAccion(null)
+    }
+  }
+  async function handleEliminarRol(id: number) {
+    if (!window.confirm('¿Eliminar este rol? Se quitará de todos los usuarios que lo tengan.')) return
+    setRolAccion(String(id))
+    try {
+      await eliminarRol(id)
+      setMensaje('Rol eliminado.')
+      invalidarCacheUsuarios()
+      invalidarCacheGlobal()
+      await cargar({ force: true })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setRolAccion(null)
+    }
+  }
+
+  // ── Edición pendiente (no envía al hacer check) ────────────
+  function abrirEdicion(p: Perfil) {
+    const isOpen = expandido === p.id
+    if (isOpen) {
+      setExpandido(null)
+      return
+    }
+    const rolesActuales = rolesPerfil[p.id] ?? []
+    setEdicion((e) => ({
+      ...e,
+      [p.id]: {
+        nombre: p.nombre,
+        celular: p.celular ?? '',
+        roles: new Set(rolesActuales),
+        is_admin: p.is_admin,
+        is_activo: p.is_activo,
+      },
+    }))
+    setExpandido(p.id)
+  }
+
+  function toggleRolPendiente(perfilId: string, rolId: number) {
+    setEdicion((prev) => {
+      const cur = prev[perfilId]
+      if (!cur) return prev
+      const ns = new Set(cur.roles)
+      if (ns.has(rolId)) ns.delete(rolId)
+      else ns.add(rolId)
+      return { ...prev, [perfilId]: { ...cur, roles: ns } }
+    })
+  }
+
+  async function guardarUsuario(perfilId: string) {
+    const pend = edicion[perfilId]
+    if (!pend) return
+    const original = perfiles.find((p) => p.id === perfilId)
+    if (!original) return
+    setError('')
+    setMensaje('')
     setGuardando(perfilId)
     try {
-      if (activo) {
-        const { error } = await supabase
-          .from('profile_roles')
-          .insert({ profile_id: perfilId, rol_id: rolId })
-        if (error) throw new Error(error.message)
-      } else {
-        const { error } = await supabase
-          .from('profile_roles')
-          .delete()
-          .eq('profile_id', perfilId)
-          .eq('rol_id', rolId)
+      // 1) profiles: nombre, celular, is_admin, is_activo (un solo update)
+      const cambiosPerfil: Partial<Record<string, unknown>> = {}
+      if (pend.nombre.trim() !== original.nombre) cambiosPerfil.nombre = pend.nombre.trim()
+      if ((pend.celular ?? '') !== (original.celular ?? '')) cambiosPerfil.celular = pend.celular || null
+      if (pend.is_admin !== original.is_admin) cambiosPerfil.is_admin = pend.is_admin
+      if (pend.is_activo !== original.is_activo) cambiosPerfil.is_activo = pend.is_activo
+      if (Object.keys(cambiosPerfil).length > 0) {
+        const { error } = await supabase.from('profiles').update(cambiosPerfil).eq('id', perfilId)
         if (error) throw new Error(error.message)
       }
-      setRolesPerfil((m) => {
-        const actualizado = activo
-          ? [...(m[perfilId] ?? []), rolId]
-          : (m[perfilId] ?? []).filter((r) => r !== rolId)
-        return { ...m, [perfilId]: actualizado }
-      })
+
+      // 2) roles: diff
+      const actuales = new Set(rolesPerfil[perfilId] ?? [])
+      const deseados = pend.roles
+      const aAgregar = [...deseados].filter((r) => !actuales.has(r))
+      const aQuitar = [...actuales].filter((r) => !deseados.has(r))
+      for (const rolId of aAgregar) {
+        const { error } = await supabase.from('profile_roles').insert({ profile_id: perfilId, rol_id: rolId })
+        if (error) throw new Error(error.message)
+      }
+      for (const rolId of aQuitar) {
+        const { error } = await supabase.from('profile_roles').delete().eq('profile_id', perfilId).eq('rol_id', rolId)
+        if (error) throw new Error(error.message)
+      }
+
+      // Actualizar local
+      setPerfiles((ps) =>
+        ps.map((p) => (p.id === perfilId ? { ...p, nombre: pend.nombre.trim(), celular: pend.celular || null, is_admin: pend.is_admin, is_activo: pend.is_activo } : p)),
+      )
+      setRolesPerfil((m) => ({ ...m, [perfilId]: [...deseados] }))
+      setMensaje('Cambios guardados.')
+      setExpandido(null)
+      invalidarCacheUsuarios()
+      invalidarCacheGlobal()
     } catch {
-      setError('No se pudieron actualizar los roles.')
+      setError('No se pudieron guardar los cambios.')
     } finally {
       setGuardando(null)
     }
-  }
-
-  async function actualizarAdmin(perfilId: string, valor: boolean) {
-    setError('')
-    setGuardando(perfilId)
-    const { error } = await supabase.from('profiles').update({ is_admin: valor }).eq('id', perfilId)
-    setGuardando(null)
-    if (error) {
-      setError('No se pudo actualizar el administrador.')
-      return
-    }
-    setPerfiles((ps) => ps.map((p) => (p.id === perfilId ? { ...p, is_admin: valor } : p)))
-  }
-
-  async function actualizarActivo(perfilId: string, valor: boolean) {
-    setError('')
-    setGuardando(perfilId)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ is_activo: valor })
-      .eq('id', perfilId)
-    setGuardando(null)
-    if (error) {
-      setError('No se pudo cambiar el estado de la cuenta.')
-      return
-    }
-    setPerfiles((ps) => ps.map((p) => (p.id === perfilId ? { ...p, is_activo: valor } : p)))
-    setMensaje(valor ? 'Cuenta activada.' : 'Cuenta desactivada.')
-  }
-
-  async function guardarDatos(perfilId: string) {
-    setError('')
-    const datos = edicion[perfilId]
-    if (!datos) return
-    setGuardando(perfilId)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ nombre: datos.nombre, celular: datos.celular || null })
-      .eq('id', perfilId)
-    setGuardando(null)
-    if (error) {
-      setError('No se pudieron guardar los datos.')
-      return
-    }
-    setPerfiles((ps) =>
-      ps.map((p) =>
-        p.id === perfilId
-          ? { ...p, nombre: datos.nombre, celular: datos.celular || null }
-          : p,
-      ),
-    )
-    setMensaje('Datos actualizados.')
-  }
-
-  function abrirEdicion(p: Perfil) {
-    setEdicion((e) => ({
-      ...e,
-      [p.id]: { nombre: p.nombre, celular: p.celular ?? '' },
-    }))
-    setExpandido((prev) => (prev === p.id ? null : p.id))
   }
 
   if (cargando) return <div className="centrado">Cargando…</div>
@@ -197,9 +307,7 @@ export default function AdminUsuarios() {
   return (
     <div className="pagina">
       <h2>Usuarios</h2>
-      <p className="subtitulo">
-        Gestiona a los integrantes de la banda y asigna los roles que cada uno desempeña.
-      </p>
+      <p className="subtitulo">Gestiona a los integrantes de la banda y asigna los roles que cada uno desempeña.</p>
 
       {mensaje && <p className="ok">{mensaje}</p>}
       {error && <p className="error">{error}</p>}
@@ -210,55 +318,25 @@ export default function AdminUsuarios() {
           <div className="grid-form">
             <label className="campo">
               <span>Código (cédula)</span>
-              <input
-                type="text"
-                value={form.codigo}
-                onChange={(e) => setForm({ ...form, codigo: e.target.value })}
-                placeholder="Ej: 1023456789"
-                required
-                minLength={6}
-                disabled={creando}
-              />
+              <input type="text" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} placeholder="Ej: 1023456789" required minLength={6} disabled={creando} />
             </label>
             <label className="campo">
               <span>Nombre</span>
-              <input
-                type="text"
-                value={form.nombre}
-                onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                placeholder="Nombre completo"
-                required
-                disabled={creando}
-              />
+              <input type="text" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre completo" required disabled={creando} />
             </label>
             <label className="campo">
               <span>Celular</span>
-              <input
-                type="text"
-                value={form.celular}
-                onChange={(e) => setForm({ ...form, celular: e.target.value })}
-                placeholder="Opcional"
-                disabled={creando}
-              />
+              <input type="text" value={form.celular} onChange={(e) => setForm({ ...form, celular: e.target.value })} placeholder="Opcional" disabled={creando} />
             </label>
           </div>
           <strong className="roles-titulo">Roles del nuevo usuario</strong>
           {roles.length === 0 ? (
-            <p className="aviso">
-              {rolesError
-                ? 'No se pudieron cargar los roles. Verifica tu conexión.'
-                : 'No se encontraron roles. Intenta recargar la página.'}
-            </p>
+            <p className="aviso">{rolesError ? 'No se pudieron cargar los roles. Verifica tu conexión.' : 'No se encontraron roles. Intenta recargar la página.'}</p>
           ) : (
             <div className="roles-check">
               {roles.map((rol) => (
                 <label key={rol.id} className="chip chip-tog">
-                  <input
-                    type="checkbox"
-                    checked={form.roles.has(rol.id)}
-                    onChange={() => toggleRolFormulario(rol.id)}
-                    disabled={creando}
-                  />
+                  <input type="checkbox" checked={form.roles.has(rol.id)} onChange={() => toggleRolFormulario(rol.id)} disabled={creando} />
                   {rol.nombre}
                 </label>
               ))}
@@ -268,6 +346,40 @@ export default function AdminUsuarios() {
             {creando ? 'Creando…' : 'Crear usuario'}
           </button>
         </form>
+      </section>
+
+      <section className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <h3>Roles</h3>
+          <span className="muted" style={{ fontSize: '0.8rem' }}>{roles.length} roles</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+          <input className="filtro-input" style={{ flex: 1, minWidth: 160 }} placeholder="Nuevo rol (ej: Voz líder)" value={nuevoRol} onChange={(e) => setNuevoRol(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), void handleCrearRol())} />
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleCrearRol()} disabled={rolAccion === 'crear' || !nuevoRol.trim()}>
+            {rolAccion === 'crear' ? 'Creando…' : 'Agregar rol'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+          {roles.map((r) => (
+            <div key={r.id} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid var(--borde)', borderRadius: 8, padding: '6px 8px' }}>
+              {editRolId === r.id ? (
+                <>
+                  <input className="filtro-input" style={{ flex: 1 }} value={editRolNombre} onChange={(e) => setEditRolNombre(e.target.value)} autoFocus />
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleActualizarRol()} disabled={rolAccion === String(r.id)}>Guardar</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditRolId(null); setEditRolNombre('') }}>Cancelar</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1, fontWeight: 600 }}>{r.nombre}</span>
+                  <span className="muted" style={{ fontSize: '0.75rem' }}>#{r.id}</span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditRolId(r.id); setEditRolNombre(r.nombre) }}>Editar</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => void handleEliminarRol(r.id)} disabled={rolAccion === String(r.id)} style={{ color: 'var(--alerta)' }}>Eliminar</button>
+                </>
+              )}
+            </div>
+          ))}
+          {roles.length === 0 && <p className="muted">Sin roles. Crea el primero.</p>}
+        </div>
       </section>
 
       <section className="card">
@@ -297,11 +409,11 @@ export default function AdminUsuarios() {
                   edicion={edicion[p.id]}
                   guardando={guardando === p.id}
                   onExpandir={() => abrirEdicion(p)}
-                  onEdicion={setEdicion}
-                  onGuardarDatos={() => void guardarDatos(p.id)}
-                  onToggleRol={(rolId, activo) => void actualizarRoles(p.id, rolId, activo)}
-                  onToggleAdmin={(valor) => void actualizarAdmin(p.id, valor)}
-                  onToggleActivo={(valor) => void actualizarActivo(p.id, valor)}
+                  onToggleRol={(rolId) => toggleRolPendiente(p.id, rolId)}
+                  onToggleAdmin={(v) => setEdicion((prev) => ({ ...prev, [p.id]: { ...prev[p.id]!, is_admin: v } }))}
+                  onToggleActivo={(v) => setEdicion((prev) => ({ ...prev, [p.id]: { ...prev[p.id]!, is_activo: v } }))}
+                  onChangeCampo={(campo, valor) => setEdicion((prev) => ({ ...prev, [p.id]: { ...prev[p.id]!, [campo]: valor } }))}
+                  onGuardar={() => void guardarUsuario(p.id)}
                 />
               ))}
             </tbody>
@@ -320,14 +432,14 @@ interface FilaProps {
   rolesDePerfil: number[]
   esYo: boolean
   expandido: boolean
-  edicion?: { nombre: string; celular: string }
+  edicion?: EdicionPendiente
   guardando: boolean
   onExpandir: () => void
-  onEdicion: (fn: (prev: Record<string, { nombre: string; celular: string }>) => Record<string, { nombre: string; celular: string }>) => void
-  onGuardarDatos: () => void
-  onToggleRol: (rolId: number, activo: boolean) => void
+  onToggleRol: (rolId: number) => void
   onToggleAdmin: (valor: boolean) => void
   onToggleActivo: (valor: boolean) => void
+  onChangeCampo: (campo: 'nombre' | 'celular', valor: string) => void
+  onGuardar: () => void
 }
 
 function UsuarioFila({
@@ -340,85 +452,53 @@ function UsuarioFila({
   edicion,
   guardando,
   onExpandir,
-  onEdicion,
-  onGuardarDatos,
   onToggleRol,
   onToggleAdmin,
   onToggleActivo,
+  onChangeCampo,
+  onGuardar,
 }: FilaProps) {
-  const nombresRoles = roles.filter((r) => rolesDePerfil.includes(r.id)).map((r) => r.nombre)
-
-  function setCampo(campo: 'nombre' | 'celular', valor: string) {
-    onEdicion((prev) => {
-      const base = prev[perfil.id] ?? {
-        nombre: perfil.nombre,
-        celular: perfil.celular ?? '',
-      }
-      return { ...prev, [perfil.id]: { ...base, [campo]: valor } }
-    })
-  }
+  const rolesParaFila = expandido && edicion ? [...edicion.roles] : rolesDePerfil
+  const nombresRoles = roles.filter((r) => rolesParaFila.includes(r.id)).map((r) => r.nombre)
 
   return (
     <>
       <tr>
         <td>{perfil.codigo}</td>
-        <td>{perfil.nombre} {esYo && <span className="badge badge-lider">Tú</span>}</td>
-        <td>{nombresRoles.length ? nombresRoles.join(', ') : <span className="muted">Sin rol</span>}</td>
         <td>
-          {perfil.is_activo ? (
-            <span className="badge badge-ok">Activo</span>
-          ) : (
-            <span className="badge badge-pendiente">Pendiente</span>
-          )}
+          {perfil.nombre} {esYo && <span className="badge badge-lider">Tú</span>}
         </td>
-        <td>{perfil.is_admin ? 'Sí' : 'No'}</td>
+        <td>{nombresRoles.length ? nombresRoles.join(', ') : <span className="muted">Sin rol</span>}</td>
+        <td>{expandido && edicion ? (edicion.is_activo ? <span className="badge badge-ok">Activo</span> : <span className="badge badge-pendiente">Pendiente</span>) : perfil.is_activo ? <span className="badge badge-ok">Activo</span> : <span className="badge badge-pendiente">Pendiente</span>}</td>
+        <td>{expandido && edicion ? (edicion.is_admin ? 'Sí' : 'No') : perfil.is_admin ? 'Sí' : 'No'}</td>
         <td>
           <button type="button" className="btn btn-ghost" onClick={onExpandir}>
-            {expandido ? 'Cerrar' : 'Editar'}
+            {expandido ? 'Cerrar' : 'Modificar'}
           </button>
         </td>
       </tr>
-      {expandido && (
+      {expandido && edicion && (
         <tr className="fila-expandida">
           <td colSpan={6}>
             <div className="editar-usuario">
               <div className="grid-form">
                 <label className="campo">
                   <span>Nombre</span>
-                  <input
-                    type="text"
-                    value={edicion?.nombre ?? ''}
-                    onChange={(e) => setCampo('nombre', e.target.value)}
-                    disabled={guardando}
-                  />
+                  <input type="text" value={edicion.nombre} onChange={(e) => onChangeCampo('nombre', e.target.value)} disabled={guardando} />
                 </label>
                 <label className="campo">
                   <span>Celular</span>
-                  <input
-                    type="text"
-                    value={edicion?.celular ?? ''}
-                    onChange={(e) => setCampo('celular', e.target.value)}
-                    disabled={guardando}
-                  />
+                  <input type="text" value={edicion.celular} onChange={(e) => onChangeCampo('celular', e.target.value)} disabled={guardando} />
                 </label>
               </div>
-              <strong className="roles-titulo">Roles</strong>
+              <strong className="roles-titulo">Roles (se guardan al presionar Modificar)</strong>
               {roles.length === 0 ? (
-                <p className="aviso">
-                  {rolesError
-                    ? 'No se pudieron cargar los roles. Verifica tu conexión.'
-                    : 'No se encontraron roles. Intenta recargar la página.'}
-                </p>
+                <p className="aviso">{rolesError ? 'No se pudieron cargar los roles. Verifica tu conexión.' : 'No se encontraron roles. Intenta recargar la página.'}</p>
               ) : (
                 <div className="roles-check">
                   {roles.map((rol) => (
                     <label key={rol.id} className="chip chip-tog">
-                      <input
-                        type="checkbox"
-                        checked={rolesDePerfil.includes(rol.id)}
-                        onChange={(e) => onToggleRol(rol.id, e.target.checked)}
-                        disabled={guardando}
-                      />
+                      <input type="checkbox" checked={edicion.roles.has(rol.id)} onChange={() => onToggleRol(rol.id)} disabled={guardando} />
                       {rol.nombre}
                     </label>
                   ))}
@@ -426,32 +506,18 @@ function UsuarioFila({
               )}
               <div className="editar-acciones">
                 <label className="chip chip-tog">
-                  <input
-                    type="checkbox"
-                    checked={perfil.is_activo}
-                    onChange={(e) => onToggleActivo(e.target.checked)}
-                    disabled={guardando}
-                  />
+                  <input type="checkbox" checked={edicion.is_activo} onChange={(e) => onToggleActivo(e.target.checked)} disabled={guardando} />
                   Cuenta activa
                 </label>
                 <label className="chip chip-tog">
-                  <input
-                    type="checkbox"
-                    checked={perfil.is_admin}
-                    onChange={(e) => onToggleAdmin(e.target.checked)}
-                    disabled={guardando}
-                  />
+                  <input type="checkbox" checked={edicion.is_admin} onChange={(e) => onToggleAdmin(e.target.checked)} disabled={guardando} />
                   Es administrador
                 </label>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={onGuardarDatos}
-                  disabled={guardando}
-                >
-                  {guardando ? 'Guardando…' : 'Guardar datos'}
+                <button type="button" className="btn btn-secondary" onClick={onGuardar} disabled={guardando}>
+                  {guardando ? 'Guardando…' : 'Guardar cambios'}
                 </button>
               </div>
+              <p className="muted" style={{ fontSize: '0.8rem' }}>Los cambios de roles y estado solo se envían al presionar “Guardar cambios”.</p>
             </div>
           </td>
         </tr>

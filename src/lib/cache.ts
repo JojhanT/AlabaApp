@@ -260,6 +260,91 @@ export function invalidarCacheDisponibilidadUsuario(userId: string) {
 
 export const DISP_TTL = DISP_TTL_MS
 
+// ── Votos por semana (vista admin) ───────────────────────────
+const CLAVE_VOTOS = `prog_votos_v${CACHE_VERSION}`
+const VOTOS_TTL_MS = 2 * 60 * 1000 // 2 min, los votos cambian seguido
+
+export interface VotosCache {
+  guardadoEn: string
+  perfiles: Perfil[]
+  porDia: Record<string, string[]>
+  diasConfig: import('./api').DiaConfig[]
+}
+
+type VotosStore = Record<string, VotosCache> // key = semana
+
+function leerVotosStore(): VotosStore {
+  return leerJson<VotosStore>(CLAVE_VOTOS) ?? {}
+}
+function escribirVotosStore(store: VotosStore) {
+  const entradas = Object.entries(store).sort((a, b) => new Date(b[1].guardadoEn).getTime() - new Date(a[1].guardadoEn).getTime())
+  escribirJson(CLAVE_VOTOS, Object.fromEntries(entradas.slice(0, 8)))
+}
+export function leerCacheVotos(semana: string): VotosCache | null {
+  return leerVotosStore()[semana] ?? null
+}
+export function esCacheVotosFresca(semana: string, ttlMs: number = VOTOS_TTL_MS): boolean {
+  const c = leerCacheVotos(semana)
+  if (!c?.guardadoEn) return false
+  const edad = Date.now() - new Date(c.guardadoEn).getTime()
+  return edad >= 0 && edad < ttlMs
+}
+export function guardarCacheVotos(semana: string, datos: Omit<VotosCache, 'guardadoEn'>) {
+  const store = leerVotosStore()
+  store[semana] = { ...datos, guardadoEn: new Date().toISOString() }
+  escribirVotosStore(store)
+}
+export function invalidarCacheVotos(semana: string) {
+  const store = leerVotosStore()
+  if (store[semana]) {
+    delete store[semana]
+    escribirJson(CLAVE_VOTOS, store)
+  }
+}
+export function invalidarTodoVotos() {
+  try {
+    localStorage.removeItem(CLAVE_VOTOS)
+  } catch {
+    /* ignorar */
+  }
+}
+
+// ── Usuarios (admin) ─────────────────────────────────────────
+const CLAVE_USUARIOS = `prog_usuarios_v${CACHE_VERSION}`
+const USUARIOS_TTL_MS = 5 * 60 * 1000 // 5 min
+
+export interface UsuariosCache {
+  guardadoEn: string
+  perfiles: Perfil[]
+  roles: Rol[]
+  rolesPerfil: Record<string, number[]>
+}
+
+export function leerCacheUsuarios(): UsuariosCache | null {
+  const data = leerJson<UsuariosCache>(CLAVE_USUARIOS)
+  if (!data?.guardadoEn) return null
+  const edad = Date.now() - new Date(data.guardadoEn).getTime()
+  if (edad < 0 || edad > USUARIOS_TTL_MS) return null
+  return data
+}
+export function esCacheUsuariosFresca(): boolean {
+  const c = leerCacheUsuarios()
+  return !!c
+}
+export function guardarCacheUsuarios(datos: Omit<UsuariosCache, 'guardadoEn'>) {
+  escribirJson(CLAVE_USUARIOS, { ...datos, guardadoEn: new Date().toISOString() } as UsuariosCache)
+}
+export function invalidarCacheUsuarios() {
+  try {
+    localStorage.removeItem(CLAVE_USUARIOS)
+  } catch {
+    /* ignorar */
+  }
+}
+
+export const VOTOS_TTL = VOTOS_TTL_MS
+export const USUARIOS_TTL = USUARIOS_TTL_MS
+
 // ── Semana seleccionada (sin cambios) ────────────────────────
 export function guardarSemanaSeleccionada(semanaStr: string, clave = CLAVE_SEMANA) {
   try {

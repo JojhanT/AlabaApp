@@ -4,6 +4,7 @@ import SemanaSelector from '../components/SemanaSelector'
 import { useSemana } from '../hooks/useSemana'
 import { toDateString } from '../lib/dias'
 import { obtenerPerfiles, obtenerVotosSemana, obtenerDiasConfig } from '../lib/api'
+import { leerCacheVotos, guardarCacheVotos, leerCacheGlobal } from '../lib/cache'
 import type { Perfil } from '../types'
 
 interface Votante {
@@ -19,34 +20,68 @@ export default function Votos() {
   const [expandido, setExpandido] = useState<string | null>(null)
   const [diasHabilitados, setDiasHabilitados] = useState<string[]>([])
 
+  function construirVotantes(perfiles: Perfil[], porDia: Record<string, string[]>) {
+    const mapa = new Map<string, Votante>()
+    for (const p of perfiles) mapa.set(p.id, { perfil: p, dias: [] })
+    for (const [dia, pids] of Object.entries(porDia)) {
+      for (const pid of pids as string[]) mapa.get(pid)?.dias.push(dia)
+    }
+    return Array.from(mapa.values()).sort((a, b) => {
+      if (a.dias.length !== b.dias.length) return b.dias.length - a.dias.length
+      return a.perfil.nombre.localeCompare(b.perfil.nombre)
+    })
+  }
+
   useEffect(() => {
     let activo = true
     async function cargar() {
-      setCargando(true)
+      const semanaStr = toDateString(semana)
+      const cached = leerCacheVotos(semanaStr)
+
+      if (cached) {
+        if (activo) {
+          setDiasHabilitados(cached.diasConfig.map((d) => d.dia_semana))
+          setVotantes(construirVotantes(cached.perfiles, cached.porDia))
+          setCargando(false)
+        }
+        if (!navigator.onLine) return
+        // Mostrar cache y revalidar en background aunque fresca
+      } else {
+        if (activo) setCargando(true)
+        if (!navigator.onLine) {
+          if (activo) setCargando(false)
+          return
+        }
+      }
+
       try {
-        const [perfiles, { porDia }, diasConfig] = await Promise.all([
-          obtenerPerfiles(),
-          obtenerVotosSemana(toDateString(semana)),
-          obtenerDiasConfig(toDateString(semana)).catch(() => []),
-        ])
-
-        if (activo) setDiasHabilitados(diasConfig.map((d) => d.dia_semana))
-
-        const mapa = new Map<string, Votante>()
-        for (const p of perfiles) {
-          mapa.set(p.id, { perfil: p, dias: [] })
+        const global = leerCacheGlobal()
+        let perfiles: Perfil[]
+        let porDia: Record<string, string[]>
+        let diasConfig: { dia_semana: string }[] | import('../lib/api').DiaConfig[]
+        if (global) {
+          perfiles = global.perfiles
+          const r = await Promise.all([
+            obtenerVotosSemana(semanaStr),
+            obtenerDiasConfig(semanaStr).catch(() => [] as import('../lib/api').DiaConfig[]),
+          ])
+          porDia = r[0].porDia
+          diasConfig = r[1]
+        } else {
+          const [ps, v, dc] = await Promise.all([
+            obtenerPerfiles(),
+            obtenerVotosSemana(semanaStr),
+            obtenerDiasConfig(semanaStr).catch(() => [] as import('../lib/api').DiaConfig[]),
+          ])
+          perfiles = ps
+          porDia = v.porDia
+          diasConfig = dc
         }
-        // Iterar sobre todos los días presentes en votos (dinámicos)
-        for (const [dia, pids] of Object.entries(porDia)) {
-          for (const pid of pids as string[]) {
-            mapa.get(pid)?.dias.push(dia)
-          }
-        }
-        const lista = Array.from(mapa.values()).sort((a, b) => {
-          if (a.dias.length !== b.dias.length) return b.dias.length - a.dias.length
-          return a.perfil.nombre.localeCompare(b.perfil.nombre)
-        })
-        if (activo) setVotantes(lista)
+        if (!activo) return
+        setDiasHabilitados((diasConfig as { dia_semana: string }[]).map((d) => d.dia_semana))
+        const lista = construirVotantes(perfiles, porDia)
+        setVotantes(lista)
+        guardarCacheVotos(semanaStr, { perfiles, porDia, diasConfig: diasConfig as import('../lib/api').DiaConfig[] })
       } catch {
         /* silencioso */
       } finally {

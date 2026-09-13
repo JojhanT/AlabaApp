@@ -13,7 +13,14 @@ import {
   obtenerProgramacionSemana,
   type DiaConfig,
 } from '../lib/api'
-import { leerCacheDisponibilidad, esCacheDispFresca, guardarCacheDisponibilidad, leerCacheGlobal } from '../lib/cache'
+import {
+  leerCacheDisponibilidad,
+  esCacheDispFresca,
+  guardarCacheDisponibilidad,
+  leerCacheGlobal,
+  invalidarCacheVotos,
+  invalidarCacheProgramacion,
+} from '../lib/cache'
 import type { Rol } from '../types'
 
 interface DiaVista {
@@ -155,20 +162,20 @@ export default function Disponibilidad() {
     const userId = perfil?.id
     try {
       await votarDia(semanaStr, dia, !activo)
-      setVotos((prev) => {
-        const nuevo = new Set(prev)
-        if (activo) nuevo.delete(dia)
-        else nuevo.add(dia)
-        // Actualizar caché por usuario (solo tu disponibilidad) para no reconsultar
-        if (userId) {
-          guardarCacheDisponibilidad(userId, semanaStr, {
-            votos: [...nuevo],
-            dias,
-            misRoles,
-          })
-        }
-        return nuevo
-      })
+      const nuevo = new Set(votos)
+      if (activo) nuevo.delete(dia)
+      else nuevo.add(dia)
+      setVotos(nuevo)
+      if (userId) {
+        guardarCacheDisponibilidad(userId, semanaStr, {
+          votos: [...nuevo],
+          dias,
+          misRoles,
+        })
+      }
+      // Bien cacheados: invalidar caches generales que dependen de votos
+      invalidarCacheVotos(semanaStr)
+      invalidarCacheProgramacion(semanaStr)
     } catch {
       setError('No se pudo guardar tu voto. Intenta de nuevo.')
       // Invalidar caché por usuario si falló, para no dejar dato optimista
