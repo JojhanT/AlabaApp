@@ -1,65 +1,75 @@
-import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { cerrarSesion } from '../lib/auth'
-import { pedirPermisoNotificaciones } from '../lib/notificaciones'
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { cerrarSesion } from "../lib/auth";
+import { pedirPermisoNotificaciones } from "../lib/notificaciones";
 
 function useOnline() {
-  const [online, setOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true))
+  const [online, setOnline] = useState(() =>
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
   useEffect(() => {
-    const on = () => setOnline(true)
-    const off = () => setOnline(false)
-    window.addEventListener('online', on)
-    window.addEventListener('offline', off)
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
     return () => {
-      window.removeEventListener('online', on)
-      window.removeEventListener('offline', off)
-    }
-  }, [])
-  return online
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+  return online;
 }
 
 export default function Layout() {
-  const { perfil, esAdmin } = useAuth()
-  const navigate = useNavigate()
-  const [menuAbierto, setMenuAbierto] = useState(false)
-  const [saliendo, setSaliendo] = useState(false)
-  const [permiso, setPermiso] = useState(() => (typeof Notification !== 'undefined' ? Notification.permission : 'default'))
-  const [mostrarModal, setMostrarModal] = useState(false)
-  const [pasoNo, setPasoNo] = useState(false)
-  const online = useOnline()
+  const { perfil, esAdmin } = useAuth();
+  const navigate = useNavigate();
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [saliendo, setSaliendo] = useState(false);
+  const [permiso, setPermiso] = useState(() =>
+    typeof Notification !== "undefined" ? Notification.permission : "default",
+  );
+  const [mostrarModal, setMostrarModal] = useState(false);
+  const [pasoNo, setPasoNo] = useState(false);
+  const online = useOnline();
 
   // Modal anti-no: obliga en pocas palabras a decir que sí
   useEffect(() => {
-    if (!perfil) return
-    if (typeof Notification === 'undefined') return
-    if (Notification.permission !== 'default') return
+    if (!perfil) return;
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission !== "default") return;
     // No mostrar si ya se mostró hace poco (anti-spam pero insiste cada 24h)
     try {
-      const ultimo = localStorage.getItem('notif_modal_dismissed_at')
-      if (ultimo && Date.now() - Number(ultimo) < 24 * 60 * 60 * 1000) return
+      const ultimo = localStorage.getItem("notif_modal_dismissed_at");
+      if (ultimo && Date.now() - Number(ultimo) < 24 * 60 * 60 * 1000) return;
     } catch {
       /* ignorar */
     }
-    const t = window.setTimeout(() => setMostrarModal(true), 1200)
-    return () => window.clearTimeout(t)
-  }, [perfil, permiso])
+    const t = window.setTimeout(() => setMostrarModal(true), 1200);
+    return () => window.clearTimeout(t);
+  }, [perfil, permiso]);
 
   async function activarNotis() {
-    const ok = await pedirPermisoNotificaciones()
-    setPermiso(Notification.permission)
+    const ok = await pedirPermisoNotificaciones();
+    setPermiso(Notification.permission);
     if (ok) {
-      setMostrarModal(false)
+      setMostrarModal(false);
       try {
-        if ('Notification' in window && Notification.permission === 'granted') {
-          if ('serviceWorker' in navigator) {
-            const reg = await navigator.serviceWorker.ready
-            await (reg as unknown as { showNotification: (t: string, o: unknown) => Promise<void> }).showNotification('Notificaciones activadas ✓', {
-              body: 'Recibirás tu programación y el recordatorio del viernes.',
-              icon: '/favicon-192.png',
-            } as unknown as NotificationOptions)
+        if ("Notification" in window && Notification.permission === "granted") {
+          if ("serviceWorker" in navigator) {
+            const reg = await navigator.serviceWorker.ready;
+            await (
+              reg as unknown as {
+                showNotification: (t: string, o: unknown) => Promise<void>;
+              }
+            ).showNotification("Notificaciones activadas ✓", {
+              body: "Recibirás tu programación y el recordatorio del viernes.",
+              icon: "/logo-192.png",
+            } as unknown as NotificationOptions);
           } else {
-            new Notification('Notificaciones activadas ✓', { body: 'Recibirás tu programación y el recordatorio del viernes.' })
+            new Notification("Notificaciones activadas ✓", {
+              body: "Recibirás tu programación y el recordatorio del viernes.",
+            });
           }
         }
       } catch {
@@ -67,15 +77,15 @@ export default function Layout() {
       }
     } else {
       // Si el navegador bloqueó o dijo no, mantener modal con instrucciones
-      setPermiso(Notification.permission)
+      setPermiso(Notification.permission);
     }
   }
 
   function dismissModalTemporal() {
-    setPasoNo(false)
-    setMostrarModal(false)
+    setPasoNo(false);
+    setMostrarModal(false);
     try {
-      localStorage.setItem('notif_modal_dismissed_at', String(Date.now()))
+      localStorage.setItem("notif_modal_dismissed_at", String(Date.now()));
     } catch {
       /* ignorar */
     }
@@ -83,24 +93,24 @@ export default function Layout() {
 
   useEffect(() => {
     function alTecla(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMenuAbierto(false)
+      if (e.key === "Escape") setMenuAbierto(false);
     }
-    window.addEventListener('keydown', alTecla)
-    return () => window.removeEventListener('keydown', alTecla)
-  }, [])
+    window.addEventListener("keydown", alTecla);
+    return () => window.removeEventListener("keydown", alTecla);
+  }, []);
 
   async function salir() {
-    setSaliendo(true)
+    setSaliendo(true);
     try {
-      await cerrarSesion()
-      navigate('/login')
+      await cerrarSesion();
+      navigate("/login");
     } finally {
-      setSaliendo(false)
+      setSaliendo(false);
     }
   }
 
   function cerrarMenu() {
-    setMenuAbierto(false)
+    setMenuAbierto(false);
   }
 
   return (
@@ -112,17 +122,33 @@ export default function Layout() {
         </div>
       )}
       {mostrarModal && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Activar notificaciones" onClick={dismissModalTemporal}>
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Activar notificaciones"
+          onClick={dismissModalTemporal}
+        >
           <div className="modal-notif" onClick={(e) => e.stopPropagation()}>
             {!pasoNo ? (
               <>
                 <div className="modal-notif-icon">🔔</div>
                 <h3 className="modal-notif-titulo">Notificaciones</h3>
-                <p className="modal-notif-text">Activa para recibir tu programación.</p>
-                <button type="button" className="btn btn-primary btn-block modal-notif-cta" onClick={() => void activarNotis()}>
+                <p className="modal-notif-text">
+                  Activa para recibir tu programación.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block modal-notif-cta"
+                  onClick={() => void activarNotis()}
+                >
                   Activar
                 </button>
-                <button type="button" className="modal-notif-no" onClick={() => setPasoNo(true)}>
+                <button
+                  type="button"
+                  className="modal-notif-no"
+                  onClick={() => setPasoNo(true)}
+                >
                   Ahora no
                 </button>
               </>
@@ -131,10 +157,18 @@ export default function Layout() {
                 <div className="modal-notif-icon">🔔</div>
                 <h3 className="modal-notif-titulo">¿Seguro?</h3>
                 <p className="modal-notif-text">Te perderás tu programación.</p>
-                <button type="button" className="btn btn-primary btn-block modal-notif-cta" onClick={() => void activarNotis()}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block modal-notif-cta"
+                  onClick={() => void activarNotis()}
+                >
                   Activar
                 </button>
-                <button type="button" className="modal-notif-no" onClick={dismissModalTemporal}>
+                <button
+                  type="button"
+                  className="modal-notif-no"
+                  onClick={dismissModalTemporal}
+                >
                   Continuar sin activar
                 </button>
               </>
@@ -148,7 +182,7 @@ export default function Layout() {
           <button
             type="button"
             className="hamburguesa"
-            aria-label={menuAbierto ? 'Cerrar menú' : 'Abrir menú'}
+            aria-label={menuAbierto ? "Cerrar menú" : "Abrir menú"}
             aria-expanded={menuAbierto}
             onClick={() => setMenuAbierto((v) => !v)}
           >
@@ -156,7 +190,7 @@ export default function Layout() {
             <span className="hamburguesa-linea" />
             <span className="hamburguesa-linea" />
           </button>
-          <nav className={`nav ${menuAbierto ? 'abierto' : ''}`}>
+          <nav className={`nav ${menuAbierto ? "abierto" : ""}`}>
             <NavLink to="/" end onClick={cerrarMenu}>
               Mi disponibilidad
             </NavLink>
@@ -179,15 +213,25 @@ export default function Layout() {
               </NavLink>
             )}
             <div className="navbar-usuario">
-              <span className="chip">{perfil?.nombre ?? '…'}</span>
+              <span className="chip">{perfil?.nombre ?? "…"}</span>
               {esAdmin && <span className="chip chip-admin">Admin</span>}
-              {typeof Notification !== 'undefined' && permiso !== 'granted' && (
-                <button type="button" className="notif-bell" onClick={() => void activarNotis()} title="Activar notificaciones" aria-label="Activar notificaciones">
+              {typeof Notification !== "undefined" && permiso !== "granted" && (
+                <button
+                  type="button"
+                  className="notif-bell"
+                  onClick={() => void activarNotis()}
+                  title="Activar notificaciones"
+                  aria-label="Activar notificaciones"
+                >
                   🔔
                 </button>
               )}
-              {typeof Notification !== 'undefined' && permiso === 'granted' && (
-                <span className="notif-bell notif-bell-activa" title="Notificaciones activadas" aria-label="Notificaciones activadas">
+              {typeof Notification !== "undefined" && permiso === "granted" && (
+                <span
+                  className="notif-bell notif-bell-activa"
+                  title="Notificaciones activadas"
+                  aria-label="Notificaciones activadas"
+                >
                   🔔
                 </span>
               )}
@@ -197,7 +241,7 @@ export default function Layout() {
                 onClick={() => void salir()}
                 disabled={saliendo}
               >
-                {saliendo ? 'Saliendo…' : 'Salir'}
+                {saliendo ? "Saliendo…" : "Salir"}
               </button>
             </div>
           </nav>
@@ -207,8 +251,10 @@ export default function Layout() {
         <Outlet />
       </main>
       <footer className="footer">
-        <p className="login-creditos">AlabaApp © 2026 · Desarrollado por <b>Jojhan Torres</b></p>
+        <p className="login-creditos">
+          AlabaApp © 2026 · Desarrollado por <b>Jojhan Torres</b>
+        </p>
       </footer>
     </div>
-  )
+  );
 }
